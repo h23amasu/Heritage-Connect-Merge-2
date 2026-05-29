@@ -1,0 +1,32 @@
+[
+  {
+    "unesco_id": "1027",
+    "name": "Engelsbergs bruk",
+    "description": "Engelsbergs bruk är ett av de bäst bevarade järnbruken i världen.",
+    "country": "Sverige",
+    "category": "Cultural",
+    "latitude": 59.9686,
+    "longitude": 15.7074,
+    "year_inscribed": 1993
+  },
+  {
+    "unesco_id": "demo_1",
+    "name": "Demo världsarv (testplats)",
+    "description": "Testplats för geofencing och annons.",
+    "country": "Sverige",
+    "category": "Cultural",
+    "latitude": 60.511334,
+    "longitude": 14.225256,
+    "year_inscribed": 2020
+  },
+  {
+    "unesco_id": "781",
+    "name": "Visby",
+    "description": "Medeltida befäst stad på Gotland.",
+    "country": "Sverige",
+    "category": "Cultural",
+    "latitude": 57.6348,
+    "longitude": 18.2948,
+    "year_inscribed": 1995
+  }
+]

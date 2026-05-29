@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heritage Connect – interaktiv prototyp</title>
+  <link rel="stylesheet" href="css/style.css?v=45" />
+</head>
+<body>
+  <div class="app-shell">
+    <main class="prototype">
+      <div class="topbar" style="display:none" aria-hidden="true">
+        <div>
+          <h1>Heritage Connect – prototyp</h1>
+          <div class="step-label" id="stepLabel">Vy 1: Digital tidningssida med annons</div>
+        </div>
+        <div class="topbar-controls">
+        <div class="test-position" aria-label="Testpositioner för demo">
+          <label class="api-settings-label" for="testPositionSelect">Testplats (demo)</label>
+          <select id="testPositionSelect" onchange="applyTestPosition(this.value)">
+            <option value="">— Din riktiga GPS-position —</option>
+            <option value="59.33,18.07">Stockholm, Sverige</option>
+            <option value="60.59,15.62">Falun, Sverige</option>
+            <option value="57.71,11.97">Göteborg, Sverige</option>
+            <option value="52.52,13.40">Berlin, Tyskland</option>
+            <option value="48.86,2.35">Paris, Frankrike</option>
+            <option value="41.90,12.50">Rom, Italien</option>
+            <option value="37.98,23.73">Aten, Grekland</option>
+            <option value="30.04,31.24">Kairo, Egypten</option>
+            <option value="35.01,135.77">Kyoto, Japan</option>
+            <option value="-33.87,151.21">Sydney, Australien</option>
+            <option value="40.71,-74.01">New York, USA</option>
+            <option value="-22.91,-43.17">Rio de Janeiro, Brasilien</option>
+          </select>
+        </div>
+        <div class="api-settings" aria-label="API-inställningar">
+          <label class="api-settings-label" for="apiBaseUrlInput">API-adress (ngrok eller localhost)</label>
+          <div class="api-settings-row">
+            <input
+              id="apiBaseUrlInput"
+              type="text"
+              spellcheck="false"
+              placeholder="http://localhost:8000"
+              autocomplete="off"
+            />
+            <button type="button" id="apiBaseUrlSave" class="btn-secondary">Spara</button>
+            <button type="button" id="apiBaseUrlTest" class="btn-secondary">Testa</button>
+          </div>
+          <p class="api-status" id="apiStatus">Laddar API-inställningar…</p>
+        </div>
+        </div>
+      </div>
+
+      <section class="newspaper-screen">
+        <div class="page-card news-site">
+          <div class="demo-geo-bar" aria-label="Demo: välj testplats">
+            <label for="testPositionSelectDemo">Demo-plats:</label>
+            <select id="testPositionSelectDemo" onchange="applyTestPosition(this.value)">
+              <option value="">— GPS / standard —</option>
+              <option value="59.33,18.07">Stockholm</option>
+              <option value="60.59,15.62">Falun</option>
+              <option value="59.97,16.01">Engelsberg</option>
+              <option value="57.71,11.97">Göteborg</option>
+              <option value="52.52,13.40">Berlin</option>
+              <option value="48.86,2.35">Paris</option>
+            </select>
+          </div>
+          <header class="news-masthead">
+            <div class="news-topline">
+              <span id="todayDate"></span>
+              <span data-i18n>Digital upplaga</span>
+            </div>
+            <div class="news-title-row">
+              <h2 data-i18n>DAGSPRESS NYHETER</h2>
+              <div class="news-weather">
+                <strong>Västerås</strong><br /><span data-i18n>12°C, klart väder</span>
+              </div>
+            </div>
+            <nav class="news-nav" aria-label="Tidningsmeny">
+              <span data-i18n>Nyheter</span>
+              <span data-i18n>Kultur</span>
+              <span data-i18n>Resor</span>
+              <span data-i18n>Opinion</span>
+              <span data-i18n>Lokalt</span>
+              <span data-i18n>Ekonomi</span>
+            </nav>
+          </header>
+
+          <div class="news-layout">
+            <article class="main-article">
+              <div class="headline-block">
+                <h3 data-i18n>Resandet ökar inför sommaren</h3>
+                <p class="lead" data-i18n>Flygplatser och tågstationer rapporterar rekordmånga bokningar. Experter tror på en stark sommar för turistnäringen i Norden.</p>
+              </div>
+
+              <div class="article-column">
+                <p data-i18n>Nya siffror visar att antalet bokade resor har ökat jämfört med samma period förra året. Flygbolagen rapporterar fullbokade avgångar redan i juni.</p>
+                <p data-i18n>Semesterperioden väntas bli intensiv, särskilt för resenärer som kombinerar natur, kultur och kortare helgresor i Skandinavien.</p>
+                <p data-i18n>Researrangörer märker ett växande intresse för platser med historiskt djup – sevärdheter som berättar en historia utöver det vanliga.</p>
+              </div>
+
+              <div class="article-column">
+                <p data-i18n>Flera regioner rapporterar samtidigt ett växande intresse för lokala kulturmiljöer. Många vill hitta information snabbt, direkt i mobilen.</p>
+
+                <aside
+                  class="heritage-ad"
+                  aria-label="Annons för Heritage Connect världsarv"
+                >
+                  <div class="ad-header-row">
+                    <span class="ad-label" data-i18n>Annons</span>
+                    <div class="ad-brand"><span class="ad-mark">N</span><span>NOSECU</span></div>
+                  </div>
+
+                  <div class="ad-image-wrap">
+                    <img id="adSiteImage" class="ad-site-image" alt="" referrerpolicy="no-referrer" decoding="async" />
+                    <div class="ad-img-fallback" id="adImagePlaceholder">
+                      <div class="heritage-logo" aria-label="NOSECU"><span class="heritage-mark">N</span><span>NOSECU</span></div>
+                    </div>
+                  </div>
+
+                  <div class="ad-card-body ad-clickable" role="button" tabindex="0"
+                    onclick="openServiceModal('detail')" onkeydown="handleAdKey(event)">
+                    <p class="ad-eyebrow" data-i18n>Världsarv nära dig</p>
+                    <p class="ad-site-name" id="adSiteName" data-i18n>Hämtar närmaste världsarv…</p>
+                    <p class="ad-teaser" id="adTeaser"></p>
+                    <div class="ad-mini-meta">
+                      <span class="pill" id="heritageDistancePill" data-i18n>Hämtar avstånd…</span>
+                      <span class="pill" id="heritageLangLabel">Svenska</span>
+                    </div>
+                  </div>
+
+                  <button type="button" class="ad-cta" data-i18n onclick="openServiceModal('detail')">Läs mer &amp; prenumerera →</button>
+                </aside>
+
+                <p data-i18n>Resebyråerna noterar även ökat intresse för upplevelser där historiska platser och lokala sevärdheter blir en del av resan.</p>
+              </div>
+            </article>
+
+            <aside class="news-side" aria-label="Sidokolumn med nyheter">
+              <div class="side-card">
+                <h4 data-i18n>Senaste nytt</h4>
+                <p data-i18n>Nya tåglinjer väntas underlätta sommarens resande.</p>
+              </div>
+              <div class="side-card">
+                <h4 data-i18n>Kultur</h4>
+                <p data-i18n>Flera museer förlänger öppettiderna inför högsäsongen.</p>
+              </div>
+              <div class="side-card">
+                <h4 data-i18n>Lokalt</h4>
+                <p data-i18n>Guidade visningar lockar fler besökare till historiska miljöer.</p>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="serviceModal" class="service-modal" aria-hidden="true">
+    <div class="service-modal-backdrop" onclick="closeServiceModal()"></div>
+    <div class="service-modal-window" role="dialog" aria-modal="true" aria-label="Heritage Connect världsarvstjänst">
+      <div class="service-modal-header">
+        <div>
+          <div class="ad-brand" style="margin-bottom:4px"><span class="ad-mark">N</span><span>NOSECU</span></div>
+          <div class="modal-progress" id="modalProgress" data-i18n>Steg 1 av 4: Världsarvsinformation</div>
+        </div>
+        <button class="modal-close" onclick="closeServiceModal()" aria-label="Stäng modal">×</button>
+      </div>
+
+      <div class="service-modal-body">
+        <section id="detail" class="modal-step active" data-i18n-title="Steg 1 av 4: Världsarvsinformation">
+          <div class="modal-page">
+            <div class="modal-header-row">
+              <button class="back-link" data-i18n onclick="closeServiceModal()">Tillbaka till tidningen</button>
+            </div>
+            <div class="content">
+              <div class="heritage-logo" aria-label="NOSECU">
+                <span class="heritage-mark">N</span>
+                <span>NOSECU</span>
+              </div>
+              <h2 id="siteDetailTitle" data-i18n>Hämtar världsarv…</h2>
+              <div class="meta" id="siteDetailMeta"></div>
+              <div class="image-box">
+                <img id="siteDetailImage" alt="" class="site-detail-img" referrerpolicy="no-referrer" decoding="async" />
+                <div id="siteDetailFallback" class="site-detail-fallback">
+                  <div class="heritage-logo" aria-hidden="true">
+                    <span class="heritage-mark">N</span>
+                    <span>NOSECU</span>
+                  </div>
+                </div>
+              </div>
+              <p id="siteDetailDescription"></p>
+              <div class="action-stack">
+                <button data-i18n onclick="openModalStep('subscribe')">Prenumerera och få SMS om världsarv nära dig</button>
+              </div>
+              <div class="distance" id="siteDetailDistance" data-i18n>Hämtar avstånd…</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="subscribe" class="modal-step" data-i18n-title="Steg 2 av 4: Starta prenumeration">
+          <div class="modal-page">
+            <div class="modal-header-row">
+              <button class="back-link" data-i18n onclick="openModalStep('detail')">Tillbaka</button>
+            </div>
+            <div class="content">
+              <p class="form-intro" data-i18n>Skapa en prenumeration för att få SMS om världsarv nära dig. Konto skapas i samband med betalningen.</p>
+
+              <div class="form-section">
+                <h3 data-i18n>Skapa konto</h3>
+                <p class="small-muted" data-i18n>Ange dina uppgifter och starta prenumerationen.</p>
+                <label id="contactLabel" for="newPhone" data-i18n>Mobilnummer</label>
+                <input id="newPhone" value="+46" />
+
+                <label data-i18n>Välj notiskanal</label>
+                <div class="choice-row" data-choice-group="subscribeChannel">
+                  <div class="choice selected" data-channel="sms" onclick="selectChoice(this); updateContactField()"><span data-i18n>SMS</span></div>
+                  <div class="choice" data-channel="email" onclick="selectChoice(this); updateContactField()"><span data-i18n>E-post</span></div>
+                </div>
+
+                <p class="small-muted" data-i18n>Betalning i nästa steg via Stripe (Visa/Mastercard). Kort sparas inte i Heritage Connect.</p>
+
+                <label class="checkbox-line">
+                  <input type="checkbox" checked aria-label="Godkänn villkor och integritetspolicy" />
+                  <span data-i18n>Jag godkänner villkoren och</span>
+                  <button type="button" class="link-btn" data-i18n onclick="togglePolicy(event)">integritetspolicyn</button>
+                </label>
+                <details id="policyDetails" style="margin-top:10px;">
+                  <summary style="display:none"></summary>
+                  <div class="policy-box">
+                    <h4 data-i18n>Integritetspolicy – Heritage Connect</h4>
+                    <p data-i18n>Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress för att kunna skicka notiser om UNESCO-världsarv i närheten av din position.</p>
+                    <p data-i18n>Din position används enbart för att avgöra vilket världsarv som är närmast dig. Positionsdata lagras inte permanent.</p>
+                    <p data-i18n>Du kan när som helst avsluta din prenumeration och begära radering av dina uppgifter via din profil eller genom att kontakta oss.</p>
+                    <p data-i18n>Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect.</p>
+                  </div>
+                </details>
+                <button class="full-width" data-i18n onclick="createSubscriptionDraft()">Gå vidare till betalning</button>
+              </div>
+
+              <div class="divider" data-i18n>eller</div>
+
+              <div class="form-section">
+                <h3 data-i18n>Har du redan ett konto?</h3>
+
+                <button type="button" class="full-width bankid-btn" data-i18n onclick="loginWithBankId()">
+                  🏦 Logga in med BankID (Sverige)
+                </button>
+
+                <div class="divider" data-i18n>eller via SMS-kod</div>
+
+                <p class="small-muted" data-i18n>Ange ditt registrerade mobilnummer.</p>
+                <label for="loginPhone" data-i18n>Mobilnummer</label>
+                <input id="loginPhone" value="+46" />
+                <button type="button" id="loginSendCodeBtn" class="full-width" data-i18n onclick="sendSmsCode()">Skicka SMS-kod</button>
+                <label for="otp" data-i18n>Engångskod via SMS</label>
+                <input id="otp" placeholder="_ _ _ _ _ _" inputmode="numeric" autocomplete="one-time-code" />
+                <p class="small-muted" data-i18n>Utveckling: efter &quot;Skicka SMS-kod&quot; är koden <strong>123456</strong> (samma som i API-test).</p>
+                <button type="button" id="loginVerifyBtn" class="full-width" data-i18n onclick="loginWithSmsCode()">Logga in</button>
+
+                <div class="divider" data-i18n>eller via e-postkod (utlandet)</div>
+
+                <p class="small-muted" data-i18n>Ange din registrerade e-postadress.</p>
+                <label for="loginEmail" data-i18n>E-post</label>
+                <input id="loginEmail" type="email" placeholder="namn@example.com" data-i18n-placeholder="namn@example.com" />
+                <button type="button" id="loginSendEmailCodeBtn" class="full-width" data-i18n onclick="sendEmailCode()">Skicka e-postkod</button>
+                <label for="emailOtp" data-i18n>Engångskod via e-post</label>
+                <input id="emailOtp" placeholder="_ _ _ _ _ _" inputmode="numeric" autocomplete="one-time-code" />
+                <p class="small-muted" data-i18n>Utveckling: efter &quot;Skicka e-postkod&quot; är koden <strong>123456</strong>.</p>
+                <button type="button" id="loginVerifyEmailBtn" class="full-width" data-i18n onclick="loginWithEmailCode()">Logga in med e-post</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="payment" class="modal-step" data-i18n-title="Steg 3 av 4: Betalning">
+          <div class="modal-page">
+            <div class="modal-header-row">
+              <button class="back-link" data-i18n onclick="openModalStep('subscribe')">Tillbaka till prenumeration</button>
+            </div>
+            <div class="content">
+              <div class="form-section">
+                <h3 data-i18n>Betala prenumeration</h3>
+                <p class="small-muted" data-i18n>Sammanfattning innan betalning.</p>
+
+                <div class="summary-box" id="paymentSummaryChannel" data-i18n>Prenumeration: SMS om världsarv nära dig</div>
+                <div class="summary-box" id="priceSummaryBox" data-i18n>Pris: 99 SEK (engångsbetalning, ingen auto-förnyelse – SMS-påminnelse skickas 3 dagar innan utgång)</div>
+                <div class="summary-box" data-i18n>Kort hanteras av betalleverantören – sparas inte i Heritage Connect</div>
+
+                <label data-i18n>Välj prenumerationsperiod</label>
+                <div class="choice-row" data-choice-group="subscriptionDuration" id="durationChoiceRow">
+                  <div class="choice selected" data-days="30" data-price="99" onclick="selectDuration(this)">
+                    <span data-i18n>1 månad</span><br><span class="duration-price">99 SEK</span>
+                  </div>
+                  <div class="choice" data-days="90" data-price="249" onclick="selectDuration(this)">
+                    <span data-i18n>3 månader</span><br><span class="duration-price">249 SEK</span>
+                  </div>
+                  <div class="choice" data-days="180" data-price="449" onclick="selectDuration(this)">
+                    <span data-i18n>6 månader</span><br><span class="duration-price">449 SEK</span>
+                  </div>
+                </div>
+                <p class="small-muted" data-i18n>Du kan avsluta prenumerationen när som helst.</p>
+
+                <div id="stripePaymentFields">
+                  <label for="paymentCardType" data-i18n>Korttyp</label>
+                  <div class="choice-row" data-choice-group="paymentCardType">
+                    <div class="choice selected" onclick="selectChoice(this)">Visa</div>
+                    <div class="choice" onclick="selectChoice(this)">Mastercard</div>
+                  </div>
+                  <label for="paymentCardNumber" data-i18n>Kortnummer (test)</label>
+                  <input id="paymentCardNumber" type="text" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242" value="4242424242424242" />
+                  <p class="small-muted" id="stripePaymentHint" data-i18n>Mock-betalning i demo. Med Stripe-nyckel i .env anropas Stripe PaymentIntent.</p>
+                </div>
+
+                <label for="paymentReceiptEmail" data-i18n>E-post för kvitto (valfritt)</label>
+                <input id="paymentReceiptEmail" type="email" placeholder="din@email.com" data-i18n-placeholder="din@email.com" />
+
+                <button type="button" class="full-width" id="paymentSubmitBtn" data-i18n onclick="paymentComplete()">
+                  Betala och starta prenumeration
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="confirmation" class="modal-step" data-i18n-title="Steg 4 av 4: Bekräftelse">
+          <div class="modal-page">
+            <div class="modal-header-row">
+              <button class="back-link" data-i18n onclick="openModalStep('detail')">Tillbaka till världsarvet</button>
+            </div>
+            <div class="content">
+              <div class="status-box" id="subscriptionStatusBox" data-i18n>Tack för din prenumeration. Prenumerationen är nu aktiv.</div>
+              <div class="info-box" id="confirmationMessage" data-i18n>En bekräftelse skickas till vald notiskanal.</div>
+
+              <div id="activeSubscriptionContent">
+                <div class="settings-row">
+                  <h3 data-i18n>NOTISKANAL</h3>
+                  <div class="choice-row" data-choice-group="settingsChannel">
+                    <div class="choice selected" data-channel="sms" onclick="updateSettingsChannel(this, 'sms')"><span data-i18n>📱 SMS-notiser</span></div>
+                    <div class="choice" data-channel="email" onclick="updateSettingsChannel(this, 'email')"><span data-i18n>✉️ E-postnotiser</span></div>
+                  </div>
+                  <div class="small-muted" id="settingsChannelMessage" data-i18n>Aktiv kanal: SMS-notiser</div>
+                </div>
+
+                <div class="settings-row">
+                  <h3 data-i18n>BETALNINGSINFORMATION</h3>
+                  <div class="payment-box" data-i18n>Betalning via Stripe (Visa/Mastercard). Ingen automatisk förnyelse.</div>
+                  <button class="secondary-btn full-width" data-i18n onclick="openModalStep('payment')">Ändra betalningsmetod</button>
+                </div>
+
+                <div class="settings-row">
+                  <h3 data-i18n>INNEHÅLLSPREFERENSER</h3>
+                  <div class="preference-box" data-i18n onclick="togglePreference(this)">Markera som besökt, inga fler SMS om detta världsarv</div>
+                </div>
+
+                <div class="settings-row">
+                  <h3 data-i18n>FRÅGA AI OM DETTA VÄRLDSARV</h3>
+                  <p class="small-muted" data-i18n>Ställ en fråga om det världsarv du är nära. AI:n svarar bara från lokala UNESCO-källor.</p>
+                  <div class="ai-question-row">
+                    <input id="aiQuestionInput" type="text" placeholder="Vad är unikt med detta världsarv?" data-i18n-placeholder="Vad är unikt med detta världsarv?" />
+                    <button class="primary-btn" data-i18n onclick="askAiQuestion()">Fråga</button>
+                  </div>
+                  <div class="ai-answer" id="aiAnswer"></div>
+                </div>
+
+                <div class="settings-row">
+                  <h3 data-i18n>PRENUMERATION</h3>
+                  <button class="danger-btn full-width" data-i18n onclick="cancelSubscription()">Avsluta prenumeration</button>
+                </div>
+
+                <div class="info-box" data-i18n>Dessa inställningar kräver inloggning och visas bara för aktiva prenumeranter.</div>
+              </div>
+
+              <div id="cancelledSubscriptionContent" style="display:none">
+                <div class="cancelled-box">
+                  <p class="cancelled-title" data-i18n>Prenumerationen är avslutad</p>
+                  <p class="small-muted" data-i18n>Du får inga fler notiser om världsarv. Tack för att du använde Heritage Connect.</p>
+                </div>
+                <button class="full-width" style="margin-top:16px" data-i18n onclick="openModalStep('detail')">
+                  Starta en ny prenumeration
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="js/app.js?v=57"></script>
+</body>
+</html>

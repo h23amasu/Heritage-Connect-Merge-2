@@ -1,0 +1,34 @@
+# Klistra in dessa som Variables i Railway (Dashboard → Service → Variables).
+# Kopiera värden från er lokala .env – committa ALDRIG .env till GitHub.
+# Denna fil är bara en checklista (inga riktiga lösenord).
+
+APP_NAME=Heritage Connect
+GEOFENCING_DEMO_MODE=true
+AUTO_CREATE_DB_TABLES=true
+DATABASE_URL=sqlite:///./heritage_connect.db
+
+# SMS – HelloSMS (riktiga SMS)
+SMS_PROVIDER=hellosms
+HELLOSMS_API_USERNAME=ert_användarnamn
+HELLOSMS_API_PASSWORD=ert_lösenord
+HELLOSMS_SENDER=Heritage C
+HELLOSMS_TEST_MODE=false
+
+# E-post – Gmail SMTP (riktig e-post)
+EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=er@gmail.com
+SMTP_PASSWORD=ert-gmail-app-lösenord
+SMTP_FROM=er@gmail.com
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+
+# Länkar i SMS (sätt till er Railway-URL efter deploy, t.ex. https://xxx.up.railway.app)
+SITE_BASE_URL=https://your-app.up.railway.app
+
+# Övrigt (valfritt)
+DEFAULT_HOME_RADIUS_KM=0.1
+SITE_NOTIFY_RADIUS_KM=30
+NOTIFICATION_COOLDOWN_SECONDS=60
+TRANSLATE_PROVIDER=auto

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heritage Connect – Världsarv</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .landing-shell { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    .landing-hero { margin: 16px 0; }
+    .landing-hero img {
+      width: 100%;
+      border-radius: var(--radius);
+      object-fit: cover;
+      max-height: 320px;
+      background: var(--soft-blue);
+      display: block;
+    }
+    .landing-meta { color: var(--muted); font-size: 14px; margin: 8px 0 16px; }
+    #landingTitle { margin: 0 0 8px; font-size: 1.5rem; line-height: 1.25; }
+    #landingDescription { line-height: 1.55; margin: 0 0 24px; }
+    .landing-actions { margin: 24px 0 0; }
+    .landing-actions a {
+      display: block;
+      text-align: center;
+      text-decoration: none;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 600;
+    }
+    .landing-loading { color: var(--muted); padding: 40px 0; text-align: center; }
+    .landing-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="landing-shell">
+      <header class="topbar">
+        <div>
+          <h1>Heritage Connect</h1>
+          <p class="step-label">Du är nära ett UNESCO-världsarv</p>
+        </div>
+        <a class="secondary-btn" href="/demo">Till tidningen</a>
+      </header>
+
+      <div id="landingLoading" class="landing-loading">Laddar plats…</div>
+
+      <div id="landingContent" style="display:none">
+        <div class="landing-hero">
+          <img id="landingImage" alt="" />
+        </div>
+        <h2 id="landingTitle"></h2>
+        <p class="landing-meta" id="landingMeta"></p>
+        <p id="landingDescription"></p>
+
+        <div class="landing-panel">
+          <h3>Fråga AI om detta världsarv</h3>
+          <p class="small-muted">AI:n svarar från lokala UNESCO-källor.</p>
+          <div class="ai-question-row">
+            <input id="landingAiInput" type="text" placeholder="Vad är unikt med detta världsarv?" />
+            <button class="primary-btn" type="button" id="landingAiBtn">Fråga</button>
+          </div>
+          <div class="ai-answer" id="landingAiAnswer"></div>
+        </div>
+
+        <div class="landing-actions">
+          <a id="landingProfileLink" href="/demo">Hantera prenumeration och profil</a>
+        </div>
+      </div>
+
+      <div id="landingError" style="display:none" class="info-box">
+        Platsen kunde inte hittas. <a href="/demo">Gå till Heritage Connect</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/landing.js?v=2"></script>
+</body>
+</html>

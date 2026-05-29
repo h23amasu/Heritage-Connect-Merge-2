@@ -1,0 +1,87 @@
+"""
+Project settings - reads from environment variables or the .env file
+"""
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # Database settings
+    DATABASE_URL: str = (
+        "postgresql://heritage_connect:heritage_connect_dev@localhost:5432/heritage_connect"
+    )
+
+    # Application settings
+    APP_NAME: str = "Heritage Connect"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = True
+
+    # Notification / geofencing
+    NOTIFICATION_COOLDOWN_SECONDS: int = 60
+    DEFAULT_HOME_RADIUS_KM: float = 5.0
+    SITE_NOTIFY_RADIUS_KM: float = 30.0
+    GEOFENCING_DEMO_MODE: bool = False  # true = plats/SMS-test utan PostgreSQL
+
+    # SMS settings (HelloSMS: https://app.hellosms.se/ – API user at dashboard.hellosms.se)
+    SMS_PROVIDER: str = "mock"  # mock | hellosms
+    HELLOSMS_API_URL: str = "https://api.hellosms.se/v1/sms/send/"
+    HELLOSMS_API_USERNAME: str = ""
+    HELLOSMS_API_PASSWORD: str = ""
+    HELLOSMS_SENDER: str = ""  # optional avsändare (3–11 tecken) eller telefonnummer
+    HELLOSMS_DEFAULT_SUBJECT: str = "Heritage Connect"
+    HELLOSMS_TEST_MODE: bool = True  # true = inga SMS skickas (enligt HelloSMS)
+    HELLOSMS_SHORT_LINKS: bool = False
+
+    # AI settings
+    AI_PROVIDER: str = "mock"  # mock, openai or ollama
+    OPENAI_API_KEY: str = ""
+
+    # Payment settings
+    PAYMENT_PROVIDER: str = "mock"  # mock or stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+
+    # E-post (notification API channel=email)
+    # mock = loggar bara (API svarar success men inget mail i inkorgen)
+    # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP API
+    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@heritage-connect.example"
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False  # true för t.ex. Gmail port 465
+    SMTP_DEFAULT_SUBJECT: str = "Heritage Connect"
+    SENDGRID_API_KEY: str = ""
+    SENDGRID_FROM: str = ""  # valfritt, annars SMTP_FROM
+
+    # API-nyckel för testmiljö (valfri – frontend skickar Bearer)
+    API_BEARER_TOKEN: str = ""
+
+    # Länkar i SMS (sätt till UI-gruppens URL i test/produktion)
+    SITE_BASE_URL: str = "https://heritage-connect.example"
+
+    # Skapa tabeller vid start (utveckling/test – använd Alembic i produktion)
+    AUTO_CREATE_DB_TABLES: bool = True
+
+    # Översättning: dictionary | deep | auto (auto = deep om tillgänglig, annars dictionary)
+    TRANSLATE_PROVIDER: str = "auto"
+
+    # Microservices – egna IP/port per tjänst (tom sträng = in-process/monolit)
+    NOTIFICATION_SERVICE_URL: str = ""
+    TRANSLATE_SERVICE_URL: str = ""
+    GEO_SERVICE_URL: str = ""
+    AI_SERVICE_URL: str = ""
+    CORE_SERVICE_URL: str = ""
+
+    # Valfritt: extern bildsökning (fallback när UNESCO saknar bra bild)
+    GOOGLE_CSE_API_KEY: str = ""
+    GOOGLE_CSE_CX: str = ""
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
+
+# Single settings instance used across the project
+settings = Settings()

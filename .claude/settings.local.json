@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"f:\\\\Hämtade Filer\\\\Heritage Connect \\(alla gruppers arbete\\)\" /B)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -u -c ' *)",
+      "PowerShell(py -m pip install psycopg2-binary 2>&1)",
+      "Bash(pip3 list *)",
+      "Bash(python -m uvicorn --version)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

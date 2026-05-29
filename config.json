@@ -1,0 +1,8 @@
+{
+  "subscriptionPriceSEK": 99,
+  "subscriptionPlans": [
+    { "label": "1 månad",   "days": 30,  "priceSEK": 99  },
+    { "label": "3 månader", "days": 90,  "priceSEK": 249 },
+    { "label": "6 månader", "days": 180, "priceSEK": 449 }
+  ]
+}

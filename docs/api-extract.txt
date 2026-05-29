@@ -1,0 +1,38 @@
+﻿--- page 8 ---
+sendApiCallbackIf set totrue, thenSMSdeliverystatuscallbackswill beusedfor themessageor messagessent withthisAPI call. Defaultstofalseif not specified.
+testModeIf set totrue, nomessageswill besent. Thiscanbeusedtotest thesystemwithout sendinganyactual messages.
+ResponseTheresponseincludesalot of informationonthemessagewhichwasdeliveredtotheAPI.
+statusCanbeÔÇ£successÔÇØ if themessagewassuccessfullyreceived, or failedif somethingwentwrong.
+statusTextThistext messageshowsmoreinformationabout thestatus. Themost commonmessagewill beÔÇ£messagereceivedsuccessfullybythesystemÔÇØ.
+messageIdsAnarrayof oneobject for eachmessagesent. Eachobject includesthefollowinginformation:ÔùÅ apiMessageId: AnuniqueIDwhichcanbeusedtoreferencethespecificmessageÔùÅ to: Thenumber whichthemessagewill besent to(ininternational format)ÔùÅ status: Thestatusof themessage. Possiblestatusesare:Ôùï 0: Themessagehasbeenplacedinaqueueandwill besent totherecipient.Thisistheexpectedresult andwill bethemost commonstatusseen. Pleasenotethat deliverycanstill fail at alater stage.Ôùï -5: Failed, likelyduetotryingtosendamessagetoacountrywhichisnÔÇÖtsupportedontheaccount (contact support@hellosms.setoaddcountriestoyour account).ÔùÅ message: Themessage. Will oftenbethesameasthemessagesent, but canbemodifiedbyhavingusedshortenedlinksfor example
+originalMessageTheoriginal messageasit wassent totheAPI.
+messageCountThenumber of SMSmessagesthat themessagewill consist of. Seehttps://hellosms.se/blogg/hur-manga-tecken-per-sms(swedish) for moreinformationonhowthisiscalculated.
+textLengthTextlengthinnumber of characters. Pleasenotethat boththisandmessageCount abovetakesshortenedlinksintoaccount, sothenumber of charactersmight not matchtheoriginalmessage.
+--- page 9 ---
+encodingEither standardor unicode. Thethelinkabovefor anexplanationof whenamessagecanbecomesent withtheunicodeencoding.
+shortenLinksCanbetrueor false, dependingonthechoicemadeinthecall.
+fromThecustomsender text usedfor themessage, seetheÔÇ£fromÔÇØ parameter.
+sendApiCallbackCanbetrueor false, dependingonthechoicemadeinthecall.
+delayThedelayparameter, onlyincludedif used.
+ExampleJSONBodysent:{ "to": ["0700000000","+48700000000"],"from": "TEST","subject": "Test","message": "Thisisatest.Pleasevisithttps://hellosms.se/sms-apitoday.","delay": 1671890400,"shortLinks": true,"testMode": false}
+JSONResponse:{ "status": "success","statusText": "messagereceivedsuccessfullybythesystem","messageIds": [{ "apiMessageId": "api-638ca85eb5c808.02026978","to": "+46700000000","status": 0,"message": "Thisisatest.Pleasevisithttps://out.io/zCc3today."},{ "apiMessageId": "api-638ca85eb647c8.05808165",
+--- page 10 ---
+"to": "+48700000000","status": -5,"message": "Thisisatest.Pleasevisithttps://out.io/pYNrtoday."}],"originalMessage": "Thisisatest.Pleasevisithttps://hellosms.se/sms-apitoday.","messageCount": 1,"textLength": 56,"encoding": "standard","shortenLinks": true,"from": "TEST","delay": 1671890400}
+Pleasenoteintheresponsethat thestatusof thesecondrecipient was-5. Thisisbecausetheaccount usedintheexampledoesnot haveaccesstosendingtonumberswiththe+48countrycode.
+--- page 11 ---
+Callbacks
+Inthissectionyoucanfindtheavailabilityof callbacksavailableandconnectedtotheAPI.
+DeliveryStatusCallbacks
+ItÔÇÖspossibletoget callbackswithdeliverystatusupdatesfromHelloSMS. Thismost oftenhappenswithinsecondsof whenweget thenotificationsfromtheoperators.
+GettingstartedwithDeliveryStatusCallbacksToget startedwithDeliveryStatusCallbacks, pleasesendusanemail atsupport@hellosms.sestatingthat youwishtoactivatedeliverystatuscallbacks, andincludeanURLwhichcanreceivethecallbacks(seemoreinformationabout thisbelow). Oncewehaverepliedwithaconfirmation, youcanstart sendingthesendApiCallbackset totrueinyour callswhensendingSMSusingtheAPI.
+ReceivingDeliveryCallbacksFor everymessagewherecallbackisrequested, thesystemwill sendacallbacktoyourcallbackURL.
+ThecallbackisaPOSTwithapplication/jsonascontent-typeandaJSONstringinthebodyof thecall.
+TheJSONstringcontainsof thefollowing:
+apiMessageIdThisisthesameapiMessageIdgivenwhentheSMSwassent.
+statusTherearethreepossiblestatusmessages:ÔùÅ delivered: ThemessagehasbeendeliveredtotherecipientÔùÅ failed: ThemessagecouldnÔÇÖt bedeliveredduetopermanent deliveryissues(inmostcasesthismeansthat thenumber doesnot exist)ÔùÅ not delivered: ThemessagescouldnÔÇÖt bedelivered. Thereasonislikelynon-permanent, for examplehavingthephoneturnedoff, inairplanemode, orsubscriptionissues. Theoperatorsoftentrytodeliver amessageseveral timesfor12-48hoursbeforeamessageisconsiderednot delivered.
+timestampUNIXtimestampfor whenwegot theupdatedstatusfromtheoperator.
+--- page 12 ---
+ExpectedresponseTheresponsefromyour server isexpectedtobe200OKastheHTTPresponsecode. Thecontent of theresponseisignored.
+AutomaticretriesIf theHTTPresponsecodefromyour server isanythingother than200OK, for exampleduetotemporarydowntime, thenthecallbackwill betriedagainat thefollowingintervals:ÔùÅ 1minuteÔùÅ 5minutesÔùÅ 15minutesÔùÅ 60minutesÔùÅ 360minutes
+Eachattempt occursthespecifiednumber of minutesafter thepreviousattempt hasfailed.
+ExampleJSONBodysent:{ "apiMessageId": "api-65493f91184b25.03258975","status": "delivered","timestamp": 1699300499}

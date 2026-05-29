@@ -1,0 +1,108 @@
+# Heritage Connect – Docker Compose
+#
+# Monolit-läge (utveckling): kör bara core lokalt:
+#   uvicorn app.main:app --reload --port 8000
+#
+# Microservice-läge: varje tjänst har egen port och fast IP i nätverket heritage_net.
+# Entrypoints finns i app/main.py och app/main_{notification,translate,geo,ai}.py
+#
+# | Tjänst       | Port | Docker-IP    | Uvicorn-modul              |
+# |--------------|------|--------------|----------------------------|
+# | db           | 5432 | 172.28.0.2   | postgis/postgis            |
+# | notification | 8001 | 172.28.0.10  | app.main_notification:app  |
+# | translate    | 8002 | 172.28.0.11  | app.main_translate:app     |
+# | geo          | 8003 | 172.28.0.12  | app.main_geo:app           |
+# | ai           | 8004 | 172.28.0.13  | app.main_ai:app            |
+# | core         | 8000 | 172.28.0.20  | app.main:app               |
+#
+# Core anropar övriga tjänster via NOTIFICATION/TRANSLATE/GEO/AI_SERVICE_URL (sätts nedan).
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: heritage_connect
+      POSTGRES_PASSWORD: heritage_connect_dev
+      POSTGRES_DB: heritage_connect
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.2
+
+  notification:
+    build: .
+    command: uvicorn app.main_notification:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    env_file: .env
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.10
+
+  translate:
+    build: .
+    command: uvicorn app.main_translate:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    env_file: .env
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.11
+
+  geo:
+    build: .
+    command: uvicorn app.main_geo:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    env_file: .env
+    environment:
+      NOTIFICATION_SERVICE_URL: http://172.28.0.10:8001
+      TRANSLATE_SERVICE_URL: http://172.28.0.11:8002
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.12
+
+  ai:
+    build: .
+    command: uvicorn app.main_ai:app --host 0.0.0.0 --port 8004
+    ports:
+      - "8004:8004"
+    env_file: .env
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.13
+
+  core:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      NOTIFICATION_SERVICE_URL: http://172.28.0.10:8001
+      TRANSLATE_SERVICE_URL: http://172.28.0.11:8002
+      GEO_SERVICE_URL: http://172.28.0.12:8003
+      AI_SERVICE_URL: http://172.28.0.13:8004
+      CORE_SERVICE_URL: http://172.28.0.20:8000
+    depends_on:
+      - db
+      - notification
+      - translate
+      - geo
+      - ai
+    networks:
+      heritage_net:
+        ipv4_address: 172.28.0.20
+
+networks:
+  heritage_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  pgdata:
