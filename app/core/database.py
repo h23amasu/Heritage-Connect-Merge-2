@@ -7,10 +7,17 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 
+_connect_args = (
+    {"check_same_thread": False}
+    if settings.DATABASE_URL.startswith("sqlite")
+    else {}
+)
+
 # Database engine
 engine = create_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,  # logs SQL queries for debugging
+    echo=settings.DEBUG,
+    connect_args=_connect_args,
 )
 
 # Session factory - each request gets its own session

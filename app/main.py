@@ -20,12 +20,17 @@ from app.models import site, user, subscription, payment, other
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Skapar databastabeller vid start om AUTO_CREATE_DB_TABLES är aktivt."""
-    if settings.AUTO_CREATE_DB_TABLES:
-        try:
-            Base.metadata.create_all(bind=engine)
-        except SQLAlchemyError:
-            if not settings.GEOFENCING_DEMO_MODE:
-                raise
+    if settings.AUTO_CREATE_DB_TABLES and not settings.GEOFENCING_DEMO_MODE:
+        if settings.DATABASE_URL.startswith("sqlite"):
+            print("[INFO] SQLite – hoppar över PostGIS-tabeller (demo/cache används).")
+        else:
+            try:
+                Base.metadata.create_all(bind=engine)
+            except SQLAlchemyError as exc:
+                print(
+                    "[WARN] Kunde inte skapa DB-tabeller – appen startar ändå "
+                    f"(demo/JSON-läge): {exc}"
+                )
 
     if not email_delivery_configured():
         print(
