@@ -1,7 +1,19 @@
 """
 Project settings - reads from environment variables or the .env file
 """
+from typing import Any
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+
+def _strip_wrapping_quotes(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    cleaned = value.strip()
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in ('"', "'"):
+        return cleaned[1:-1]
+    return cleaned
 
 
 class Settings(BaseSettings):
@@ -77,6 +89,14 @@ class Settings(BaseSettings):
     # Valfritt: extern bildsökning (fallback när UNESCO saknar bra bild)
     GOOGLE_CSE_API_KEY: str = ""
     GOOGLE_CSE_CX: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def strip_env_quotes(cls, data: Any) -> Any:
+        """Railway Raw Editor kan spara värden med citationstecken – rensa dem."""
+        if isinstance(data, dict):
+            return {key: _strip_wrapping_quotes(value) for key, value in data.items()}
+        return data
 
     class Config:
         env_file = ".env"

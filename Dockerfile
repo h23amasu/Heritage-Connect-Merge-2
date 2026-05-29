@@ -18,4 +18,4 @@ RUN chmod +x scripts/railway-start.sh
 
 EXPOSE 8000
 
-CMD ["scripts/railway-start.sh"]
+CMD ["/bin/sh", "-c", "echo Heritage Connect on port ${PORT:-8000} && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
