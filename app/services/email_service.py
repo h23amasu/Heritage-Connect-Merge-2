@@ -84,7 +84,11 @@ class SendGridEmailProvider(EmailProviderInterface):
         if not api_key:
             raise EmailDeliveryError("SENDGRID_API_KEY saknas i .env")
 
-        from_email = settings.SMTP_FROM or settings.SENDGRID_FROM
+        from_email = (settings.SENDGRID_FROM or settings.SMTP_FROM or "").strip()
+        if not from_email or "@" not in from_email:
+            raise EmailDeliveryError(
+                "SENDGRID_FROM saknas i .env – måste vara en verifierad Single Sender i SendGrid"
+            )
         payload = {
             "personalizations": [{"to": [{"email": to}]}],
             "from": {"email": from_email},
@@ -116,11 +120,117 @@ class SendGridEmailProvider(EmailProviderInterface):
         }
 
 
+class ResendEmailProvider(EmailProviderInterface):
+    def send(self, to: str, subject: str, message: str) -> dict:
+        api_key = (settings.RESEND_API_KEY or "").strip()
+        if not api_key:
+            raise EmailDeliveryError("RESEND_API_KEY saknas i .env")
+
+        from_email = settings.RESEND_FROM or settings.SMTP_FROM
+        payload = {
+            "from": from_email,
+            "to": [to],
+            "subject": subject or settings.SMTP_DEFAULT_SUBJECT,
+            "text": message,
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            if response.status_code not in (200, 201):
+                raise EmailDeliveryError(
+                    f"Resend svarade {response.status_code}: {response.text[:300]}"
+                )
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise EmailDeliveryError(f"Resend-nätverksfel: {exc}") from exc
+
+        return {
+            "status": "sent",
+            "message_id": data.get("id") or f"resend_{uuid.uuid4().hex[:12]}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+class Smtp2GoEmailProvider(EmailProviderInterface):
+    def send(self, to: str, subject: str, message: str) -> dict:
+        api_key = (settings.SMTP2GO_API_KEY or "").strip()
+        if not api_key:
+            raise EmailDeliveryError("SMTP2GO_API_KEY saknas i .env")
+
+        from_email = (settings.SMTP2GO_FROM or settings.SMTP_FROM or "").strip()
+        if not from_email or "@" not in from_email:
+            raise EmailDeliveryError(
+                "SMTP2GO_FROM saknas i .env – måste vara en verifierad Single sender i SMTP2GO"
+            )
+
+        sender = (
+            from_email
+            if "<" in from_email and ">" in from_email
+            else f"Heritage Connect <{from_email}>"
+        )
+        payload = {
+            "sender": sender,
+            "to": [to],
+            "subject": subject or settings.SMTP_DEFAULT_SUBJECT,
+            "text_body": message,
+            "fastaccept": True,
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.smtp2go.com/v3/email/send",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Smtp2go-Api-Key": api_key,
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
+            email_data = data.get("data") or {}
+            api_error = email_data.get("error")
+            if response.status_code != 200 or api_error:
+                detail = api_error or response.text[:300]
+                raise EmailDeliveryError(
+                    f"SMTP2GO svarade {response.status_code}: {detail}"
+                )
+            if email_data.get("failed"):
+                raise EmailDeliveryError(
+                    f"SMTP2GO kunde inte skicka: {email_data.get('failures') or data}"
+                )
+        except httpx.HTTPError as exc:
+            raise EmailDeliveryError(f"SMTP2GO-nätverksfel: {exc}") from exc
+
+        message_id = email_data.get("email_id") or data.get("request_id") or f"smtp2go_{uuid.uuid4().hex[:12]}"
+        logger.info("SMTP2GO mail skickat till %s (id=%s)", to, message_id)
+        return {
+            "status": "sent",
+            "message_id": message_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
 def _resolve_provider() -> EmailProviderInterface:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
 
     if provider == "sendgrid":
         return SendGridEmailProvider()
+    if provider == "resend":
+        return ResendEmailProvider()
+    if provider == "smtp2go":
+        return Smtp2GoEmailProvider()
     if provider == "smtp" and settings.SMTP_HOST:
         return SmtpEmailProvider()
     if provider == "smtp" and not settings.SMTP_HOST:
@@ -135,7 +245,21 @@ def send_email(to: str, subject: str, message: str) -> dict:
 def email_delivery_configured() -> bool:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
     if provider == "sendgrid":
-        return bool((settings.SENDGRID_API_KEY or "").strip())
+        from_addr = (settings.SENDGRID_FROM or settings.SMTP_FROM or "").strip()
+        return bool((settings.SENDGRID_API_KEY or "").strip() and "@" in from_addr)
+    if provider == "resend":
+        return bool((settings.RESEND_API_KEY or "").strip())
+    if provider == "smtp2go":
+        from_addr = (settings.SMTP2GO_FROM or settings.SMTP_FROM or "").strip()
+        return bool((settings.SMTP2GO_API_KEY or "").strip() and "@" in from_addr)
     if provider == "smtp":
         return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
     return False
+
+
+def email_provider_name() -> str:
+    return (settings.EMAIL_PROVIDER or "mock").lower().strip()
+
+
+def email_uses_https_api() -> bool:
+    return email_provider_name() in {"sendgrid", "resend", "smtp2go"}

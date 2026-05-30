@@ -44,14 +44,36 @@ def test_payment_intent_requires_stripe():
 
 
 def test_email_auth_flow():
+    email = "test@example.com"
     client.post(
         "/api/auth/request-email-code",
-        json={"email": "test@example.com", "purpose": "login"},
+        json={"email": email, "purpose": "login"},
     )
+    code = _email_otp_store[email]["code"]
     response = client.post(
         "/api/auth/verify-email-code",
-        json={"email": "test@example.com", "code": "123456"},
+        json={"email": email, "code": code},
     )
     assert response.status_code == 200
     assert response.json()["method"] == "email"
     assert "access_token" in response.json()
+
+
+def test_request_email_code_dispatches_notification(monkeypatch):
+    dispatched = []
+
+    def capture(notification):
+        dispatched.append(notification)
+        return True
+
+    monkeypatch.setattr("app.routers.auth.dispatch_notification", capture)
+
+    response = client.post(
+        "/api/auth/request-email-code",
+        json={"email": "slow@example.com", "purpose": "login"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert len(dispatched) == 1
+    assert dispatched[0].channel == "email"

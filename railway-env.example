@@ -14,15 +14,19 @@ HELLOSMS_API_PASSWORD=ert_api_lösenord
 HELLOSMS_SENDER=46764911139
 HELLOSMS_TEST_MODE=false
 
-# E-post – Gmail SMTP (riktig e-post)
-EMAIL_PROVIDER=smtp
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=er@gmail.com
-SMTP_PASSWORD=ert-gmail-app-lösenord
-SMTP_FROM=er@gmail.com
-SMTP_USE_TLS=true
-SMTP_USE_SSL=false
+# OwnTracks (mobil bakgrunds-GPS) – se docs/OWNTRACKS.md
+# OWOTRACKS_HTTP_USER=heritage
+# OWOTRACKS_HTTP_PASSWORD=ert-lösenord
+
+# E-post på Railway – SendGrid rekommenderas för leverans till alla
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_...
+RESEND_FROM=onboarding@resend.dev
+
+# Alternativ: SendGrid (Single Sender Verification)
+# EMAIL_PROVIDER=sendgrid
+# SENDGRID_API_KEY=SG.xxx
+# SENDGRID_FROM=din@verifierade-adress.se
 
 # Betalning – Stripe test (4242 4242 4242 4242). Byt till sk_live_… för skarpt.
 PAYMENT_PROVIDER=stripe

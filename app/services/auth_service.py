@@ -3,14 +3,15 @@ Autentisering – SMS-engångskod och BankID (mock eller riktig RP).
 """
 from __future__ import annotations
 
-import random
+import logging
 import secrets
 import time
 from typing import Optional
 
 from app.core.phone_policy import is_blocked_phone
 from app.schemas import NotificationRequest
-from app.services.notification_service import dispatch_notification
+
+logger = logging.getLogger(__name__)
 
 # phone -> {code, expires_at}
 _otp_store: dict[str, dict] = {}
@@ -20,7 +21,10 @@ _email_otp_store: dict[str, dict] = {}
 _session_store: dict[str, str] = {}
 
 OTP_TTL_SECONDS = 300
-DEV_OTP_CODE = "123456"
+
+
+def _generate_otp_code() -> str:
+    return f"{secrets.randbelow(900000) + 100000:06d}"
 
 
 def normalize_phone(phone: str) -> str:
@@ -32,18 +36,18 @@ def normalize_phone(phone: str) -> str:
     return p
 
 
-def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str]]:
+def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str], Optional[NotificationRequest]]:
     """
-    Skickar OTP via gemensamma notification-API:t.
-    Returnerar (ok, error_code, dev_code för test).
+    Förbereder OTP och returnerar notification för bakgrundsskick.
+    Returnerar (ok, error_code, dev_code för test, notification).
     """
     normalized = normalize_phone(phone)
     if is_blocked_phone(normalized) or is_blocked_phone(phone):
-        return False, "invalid_recipient", None
+        return False, "invalid_recipient", None, None
     if not normalized.startswith("+") or len(normalized) < 10:
-        return False, "invalid_recipient", None
+        return False, "invalid_recipient", None, None
 
-    code = DEV_OTP_CODE if True else f"{random.randint(100000, 999999)}"
+    code = _generate_otp_code()
     _otp_store[normalized] = {
         "code": code,
         "expires_at": time.time() + OTP_TTL_SECONDS,
@@ -56,21 +60,20 @@ def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str]]:
         message=message,
         user_id=normalized,
     )
-    dispatch_notification(notification)
-    return True, None, code
+    return True, None, code, notification
 
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
-    """Skickar OTP via e-post (samma notification-API som kvitton)."""
+def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str], Optional[NotificationRequest]]:
+    """Förbereder OTP via e-post och returnerar notification för bakgrundsskick."""
     normalized = _normalize_email(email)
     if "@" not in normalized:
-        return False, "invalid_recipient", None
+        return False, "invalid_recipient", None, None
 
-    code = DEV_OTP_CODE
+    code = _generate_otp_code()
     _email_otp_store[normalized] = {
         "code": code,
         "expires_at": time.time() + OTP_TTL_SECONDS,
@@ -84,8 +87,7 @@ def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
         subject="Heritage Connect – inloggningskod",
         user_id=normalized,
     )
-    dispatch_notification(notification)
-    return True, None, code
+    return True, None, code, notification
 
 
 def verify_email_code(email: str, code: str) -> tuple[bool, Optional[str], Optional[str]]:

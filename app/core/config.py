@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     SITE_NOTIFY_RADIUS_KM: float = 30.0
     GEOFENCING_DEMO_MODE: bool = False  # true = plats/SMS-test utan PostgreSQL
 
+    # OwnTracks HTTP (mobil bakgrunds-GPS → geofencing-SMS)
+    OWOTRACKS_HTTP_USER: str = ""
+    OWOTRACKS_HTTP_PASSWORD: str = ""
+
     # SMS settings (HelloSMS: https://app.hellosms.se/ – API user at dashboard.hellosms.se)
     SMS_PROVIDER: str = "mock"  # mock | hellosms
     HELLOSMS_API_URL: str = "https://api.hellosms.se/v1/sms/send/"
@@ -65,8 +69,8 @@ class Settings(BaseSettings):
 
     # E-post (notification API channel=email)
     # mock = loggar bara (API svarar success men inget mail i inkorgen)
-    # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP API
-    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid
+    # smtp = Gmail m.fl. | sendgrid | resend | smtp2go (HTTPS API för Railway)
+    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid | resend | smtp2go
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -77,6 +81,10 @@ class Settings(BaseSettings):
     SMTP_DEFAULT_SUBJECT: str = "Heritage Connect"
     SENDGRID_API_KEY: str = ""
     SENDGRID_FROM: str = ""  # valfritt, annars SMTP_FROM
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = ""  # valfritt, annars SMTP_FROM
+    SMTP2GO_API_KEY: str = ""
+    SMTP2GO_FROM: str = ""  # valfritt, annars SMTP_FROM
 
     # API-nyckel för testmiljö (valfri – frontend skickar Bearer)
     API_BEARER_TOKEN: str = ""

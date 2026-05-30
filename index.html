@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=49" />
+  <link rel="stylesheet" href="css/style.css?v=55" />
 </head>
 <body>
   <div class="app-shell">
@@ -190,12 +190,7 @@
               <div class="meta" id="siteDetailMeta"></div>
               <div class="image-box">
                 <img id="siteDetailImage" alt="" class="site-detail-img" referrerpolicy="no-referrer" decoding="async" />
-                <div id="siteDetailFallback" class="site-detail-fallback">
-                  <div class="heritage-logo" aria-hidden="true">
-                    <span class="heritage-mark">N</span>
-                    <span>NOSECU</span>
-                  </div>
-                </div>
+                <div id="siteDetailFallback" class="site-detail-fallback" aria-hidden="true"></div>
               </div>
               <p id="siteDetailDescription"></p>
               <div class="action-stack">
@@ -268,7 +263,7 @@
                 <button type="button" id="loginSendCodeBtn" class="full-width" data-i18n onclick="sendSmsCode()">Skicka SMS-kod</button>
                 <label for="otp" data-i18n>Engångskod via SMS</label>
                 <input id="otp" placeholder="_ _ _ _ _ _" inputmode="numeric" autocomplete="one-time-code" />
-                <p class="small-muted" data-i18n>Utveckling: efter &quot;Skicka SMS-kod&quot; är koden <strong>123456</strong> (samma som i API-test).</p>
+                <p class="small-muted" data-i18n>Koden skickas till ditt mobilnummer och gäller i 5 minuter.</p>
                 <button type="button" id="loginVerifyBtn" class="full-width" data-i18n onclick="loginWithSmsCode()">Logga in</button>
 
                 <div class="divider" data-i18n>eller via e-postkod (utlandet)</div>
@@ -279,7 +274,7 @@
                 <button type="button" id="loginSendEmailCodeBtn" class="full-width" data-i18n onclick="sendEmailCode()">Skicka e-postkod</button>
                 <label for="emailOtp" data-i18n>Engångskod via e-post</label>
                 <input id="emailOtp" placeholder="_ _ _ _ _ _" inputmode="numeric" autocomplete="one-time-code" />
-                <p class="small-muted" data-i18n>Utveckling: efter &quot;Skicka e-postkod&quot; är koden <strong>123456</strong>.</p>
+                <p class="small-muted" data-i18n>Koden skickas till din e-post och gäller i 5 minuter.</p>
                 <button type="button" id="loginVerifyEmailBtn" class="full-width" data-i18n onclick="loginWithEmailCode()">Logga in med e-post</button>
               </div>
             </div>
@@ -297,7 +292,7 @@
                 <p class="small-muted" data-i18n>Sammanfattning innan betalning.</p>
 
                 <div class="summary-box" id="paymentSummaryChannel" data-i18n>Prenumeration: SMS om världsarv nära dig</div>
-                <div class="summary-box" id="priceSummaryBox" data-i18n>Pris: 99 SEK (engångsbetalning, ingen auto-förnyelse – SMS-påminnelse skickas 3 dagar innan utgång)</div>
+                <div class="summary-box" id="priceSummaryBox" data-i18n>Pris: 99 SEK (engångsbetalning – du betalar igen manuellt när perioden löper ut, ingen auto-förnyelse)</div>
                 <div class="summary-box" data-i18n>Kort hanteras av betalleverantören – sparas inte i Heritage Connect</div>
 
                 <label data-i18n>Välj prenumerationsperiod</label>
@@ -398,6 +393,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=92"></script>
+  <script src="js/app.js?v=96"></script>
 </body>
 </html>

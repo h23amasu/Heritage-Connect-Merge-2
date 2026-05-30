@@ -119,6 +119,36 @@ SWEDISH_SITES: dict[str, dict[str, str]] = {
             "välstånd, hantverk och festkultur i den agrara historien."
         ),
     },
+    # Demopositioner i UI (Berlin / Paris)
+    "896": {
+        "name_sv": "Museumsön i Berlin",
+        "desc_sv": (
+            "Museet som socialt fenomen har sina rötter i upplysningstiden på 1700-talet. "
+            "De fem museerna på Museumsinsel i Berlin, uppförda mellan 1824 och 1930, "
+            "är förverkligandet av ett visionärt projekt och visar hur museers utformning "
+            "utvecklats under 1900-talet. Varje museum designades för att skapa en organisk "
+            "koppling till den konst det hyser."
+        ),
+    },
+    "868": {
+        "name_sv": "Santiago de Compostelas vägar i Frankrike",
+        "desc_sv": (
+            "Santiago de Compostela var det främsta målet för otaliga fromma pilgrimer som "
+            "vandrade dit från hela Europa under medeltiden. För att nå Spanien måste "
+            "pilgrimer passera genom Frankrike, och de viktiga historiska monument som "
+            "ingår i världsarvet markerar de fyra pilgrimsvägarna genom landet."
+        ),
+    },
+    "600": {
+        "name_sv": "Paris, Seine-flodens stränder",
+        "desc_sv": (
+            "Från Louvren till Eiffeltornet, från Place de la Concorde till Grand och "
+            "Petit Palais kan París utveckling och historia skådas längs Seine. "
+            "Notre-Dame-katedralen och Sainte-Chapelle är arkitektoniska mästerverk, "
+            "medan Haussmanns vida torg och boulevarder påverkat stadsplanering världen "
+            "över sedan slutet av 1800-talet."
+        ),
+    },
 }
 
 

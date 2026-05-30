@@ -183,6 +183,8 @@ const UI_MODAL_I18N = {
     "Engångskod via SMS": "One-time code via SMS",
     "Utveckling: efter \"Skicka SMS-kod\" är koden 123456 (samma som i API-test).":
       "Development: after \"Send SMS code\" the code is 123456 (same as in the API test).",
+    "Koden skickas till ditt mobilnummer och gäller i 5 minuter.":
+      "The code is sent to your mobile number and is valid for 5 minutes.",
     "Logga in": "Log in",
     "eller via e-postkod (utlandet)": "or via email code (international)",
     "Ange din registrerade e-postadress.": "Enter your registered email address.",
@@ -190,12 +192,16 @@ const UI_MODAL_I18N = {
     "Engångskod via e-post": "One-time code via email",
     "Utveckling: efter \"Skicka e-postkod\" är koden 123456.":
       "Development: after \"Send email code\" the code is 123456.",
+    "Koden skickas till din e-post och gäller i 5 minuter.":
+      "The code is sent to your email and is valid for 5 minutes.",
     "Logga in med e-post": "Log in with email",
     "Betala prenumeration": "Pay for subscription",
     "Sammanfattning innan betalning.": "Summary before payment.",
     "Prenumeration: SMS om världsarv nära dig": "Subscription: SMS about world heritage near you",
     "Pris: 99 SEK (engångsbetalning, ingen auto-förnyelse – SMS-påminnelse skickas 3 dagar innan utgång)":
-      "Price: 99 SEK (one-time payment, no auto-renewal – SMS reminder sent 3 days before expiry)",
+      "Price: 99 SEK (one-time payment, no auto-renewal – you must pay again to continue after the period ends)",
+    "Pris: 99 SEK (engångsbetalning – du betalar igen manuellt när perioden löper ut, ingen auto-förnyelse)":
+      "Price: 99 SEK (one-time payment – you pay again manually when the period ends, no auto-renewal)",
     "Kort hanteras av betalleverantören – sparas inte i Heritage Connect":
       "Card is handled by the payment provider – not stored in Heritage Connect",
     "Välj prenumerationsperiod": "Choose subscription period",
@@ -553,7 +559,29 @@ const SWEDISH_GEO_FALLBACK = [
 ];
 
 let LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
+/** Full UNESCO-post per unesco_id – texter även när geo-filen saknar desc_xx. */
+const HERITAGE_TEXT_BY_ID = new Map();
 let heritageSitesLoadPromise = null;
+
+function indexHeritageSiteTexts(sites) {
+  if (!Array.isArray(sites)) return;
+  for (const site of sites) {
+    const id = String(site?.unesco_id || site?.id || "");
+    if (id) HERITAGE_TEXT_BY_ID.set(id, site);
+  }
+}
+
+function mergeHeritageSiteTexts(site) {
+  if (!site) return site;
+  const id = String(site.unesco_id || site.id || "");
+  const full = id ? HERITAGE_TEXT_BY_ID.get(id) : null;
+  if (!full) return site;
+
+  const textFields = Object.fromEntries(
+    Object.entries(full).filter(([key]) => key.startsWith("desc_") || key.startsWith("name_"))
+  );
+  return { ...full, ...site, ...textFields };
+}
 
 async function enrichHeritageSitesFromFullData() {
   try {
@@ -561,9 +589,9 @@ async function enrichHeritageSitesFromFullData() {
     if (!response.ok) return;
     const fullSites = await response.json();
     if (Array.isArray(fullSites) && fullSites.length > 0) {
+      indexHeritageSiteTexts(fullSites);
       LOCAL_HERITAGE_SITES = fullSites;
       console.info(`UNESCO fullständig databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-      await refreshGeoFromApi();
     }
   } catch (error) {
     console.debug("Kunde inte ladda fullständig UNESCO-data i bakgrunden.", error);
@@ -578,8 +606,9 @@ async function loadHeritageSitesOnce() {
         throw new Error(`HTTP ${response.status}`);
       }
       LOCAL_HERITAGE_SITES = await response.json();
+      indexHeritageSiteTexts(LOCAL_HERITAGE_SITES);
       console.info(`UNESCO-geodata laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-      void enrichHeritageSitesFromFullData();
+      await enrichHeritageSitesFromFullData();
       return LOCAL_HERITAGE_SITES;
     } catch (err) {
       if (attempt < 2) {
@@ -729,23 +758,24 @@ function findClosestSiteLocal(lat, lng) {
     if (d < minDist) { minDist = d; closest = site; }
   }
   if (!closest) return null;
-  console.log("Närmaste:", closest.name, `(id ${closest.unesco_id}, ${(minDist).toFixed(1)} km)`);
+  const site = mergeHeritageSiteTexts(closest);
+  console.log("Närmaste:", site.name, `(id ${site.unesco_id}, ${(minDist).toFixed(1)} km)`);
   const descriptions = Object.fromEntries(
-    Object.entries(closest).filter(([key]) => key.startsWith("desc_"))
+    Object.entries(site).filter(([key]) => key.startsWith("desc_"))
   );
   const names = Object.fromEntries(
-    Object.entries(closest).filter(([key]) => key.startsWith("name_"))
+    Object.entries(site).filter(([key]) => key.startsWith("name_"))
   );
   return {
-    name: closest.name,
-    country: closest.country,
-    image_url: resolveSiteImageUrl(closest),
-    description: closest.description || null,
+    name: site.name,
+    country: site.country,
+    image_url: resolveSiteImageUrl(site),
+    description: site.description || null,
     ...descriptions,
     ...names,
     distance_m: Math.round(minDist * 1000),
-    unesco_id: closest.unesco_id || null,
-    year_inscribed: closest.year_inscribed || null,
+    unesco_id: site.unesco_id || null,
+    year_inscribed: site.year_inscribed || null,
   };
 }
 
@@ -947,7 +977,7 @@ async function updatePriceSummaryBox() {
   if (!priceBox) return;
   const months = Math.round(prototypeState.duration_days / 30);
   const period = months === 1 ? "1 månad" : `${months} månader`;
-  const svText = `Pris: ${SUBSCRIPTION_PRICE_SEK} SEK – ${period} (ingen auto-förnyelse, SMS-påminnelse 3 dagar innan utgång)`;
+  const svText = `Pris: ${SUBSCRIPTION_PRICE_SEK} SEK – ${period} (engångsbetalning, du betalar igen manuellt när perioden löper ut)`;
   await setElementI18n(priceBox, svText);
 }
 
@@ -990,6 +1020,49 @@ async function readApiError(response, data) {
     }
   }
   return `HTTP ${response.status}`;
+}
+
+async function fetchApiJson(url, options = {}, { timeoutMs = 15000 } = {}) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    window.clearTimeout(timeoutId);
+
+    let data = {};
+    const raw = await response.text();
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        if (!response.ok) {
+          throw new Error(raw.slice(0, 200) || `HTTP ${response.status}`);
+        }
+      }
+    }
+
+    return { response, data };
+  } catch (error) {
+    window.clearTimeout(timeoutId);
+    if (error?.name === "AbortError") {
+      throw new Error("timeout");
+    }
+    throw error;
+  }
+}
+
+function formatApiConnectionError(error) {
+  if (error?.message === "timeout") {
+    return "API:t svarade inte i tid – försök igen om ett ögonblick.";
+  }
+  if (window.location.hostname.includes("railway.app")) {
+    return "Kunde inte nå API – kontrollera att Railway-deployen är aktiv.";
+  }
+  return "Kunde inte nå API – kontrollera att uvicorn körs på port 8000.";
 }
 
 async function probeApiConnection() {
@@ -1251,9 +1324,10 @@ async function translateDistanceLabels(targetLang) {
 async function refreshClosestSiteTextOnly(site, lang) {
   if (!site) return;
 
+  const merged = mergeHeritageSiteTexts(site);
   const target = (lang || getNewspaperLang()).toLowerCase().slice(0, 2);
-  currentSite.name = await resolveSiteName(site, target);
-  const displayDesc = await resolveSiteDescription(site, target);
+  currentSite.name = await resolveSiteName(merged, target);
+  const displayDesc = await resolveSiteDescription(merged, target);
 
   const adName = document.getElementById("adSiteName");
   if (adName) {
@@ -1296,11 +1370,12 @@ async function applyClosestSiteToUi(site) {
 
   applyClosestSiteToUiSync(site);
 
+  const merged = mergeHeritageSiteTexts(site);
   const seq = ++applySiteUiSeq;
-  const siteName = await resolveSiteName(site);
+  const siteName = await resolveSiteName(merged);
   if (isStaleUiApply(seq)) return;
 
-  const displayDesc = await resolveSiteDescription(site);
+  const displayDesc = await resolveSiteDescription(merged, getActiveReaderLang());
   if (isStaleUiApply(seq)) return;
 
   const siteImageId = site.unesco_id || site.id;
@@ -2543,11 +2618,11 @@ async function sendSmsCode() {
 
     const otp = document.getElementById("otp");
     if (otp) {
-      otp.value = "123456";
+      otp.value = "";
       otp.focus();
     }
 
-    toast(data.message || "SMS-kod skickad. Utvecklingskod: 123456");
+    toast(data.message || "SMS-kod skickad. Kontrollera ditt mobilnummer.");
   } catch (error) {
     console.warn("request-code misslyckades:", error);
     toast("Kunde inte nå API – kontrollera att uvicorn körs på port 8000.");
@@ -2631,28 +2706,32 @@ async function sendEmailCode() {
   }
 
   try {
-    const response = await fetch(API_ENDPOINTS.loginRequestEmailCode, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
+    const { response, data } = await fetchApiJson(
+      API_ENDPOINTS.loginRequestEmailCode,
+      {
+        method: "POST",
+        headers: apiRequestHeaders(),
+        body: JSON.stringify(payload),
+      },
+      { timeoutMs: 12000 }
+    );
 
     if (!response.ok) {
-      toast(`Kunde inte skicka kod: ${await readApiError(response, data)}`);
+      const detail = data?.message || (await readApiError(response, data));
+      toast(`Kunde inte skicka kod: ${detail}`);
       return;
     }
 
     const otp = document.getElementById("emailOtp");
     if (otp) {
-      otp.value = "123456";
+      otp.value = "";
       otp.focus();
     }
 
-    toast(data.message || "E-postkod skickad. Utvecklingskod: 123456");
+    toast(data.message || "Inloggningskod skickad. Kontrollera din e-post.");
   } catch (error) {
     console.warn("request-email-code misslyckades:", error);
-    toast("Kunde inte nå API – kontrollera att uvicorn körs på port 8000.");
+    toast(formatApiConnectionError(error));
   } finally {
     if (sendBtn) {
       sendBtn.disabled = false;
@@ -2680,12 +2759,15 @@ async function loginWithEmailCode() {
   }
 
   try {
-    const response = await fetch(API_ENDPOINTS.loginVerifyEmailCode, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
+    const { response, data } = await fetchApiJson(
+      API_ENDPOINTS.loginVerifyEmailCode,
+      {
+        method: "POST",
+        headers: apiRequestHeaders(),
+        body: JSON.stringify(payload),
+      },
+      { timeoutMs: 10000 }
+    );
 
     if (!response.ok) {
       toast(`Inloggning misslyckades: ${await readApiError(response, data)}`);
@@ -2699,13 +2781,14 @@ async function loginWithEmailCode() {
     prototypeState.access_token = data.access_token || null;
     prototypeState.subscription_active = true;
 
-    updateConfirmationMessage();
+    await updateConfirmationMessage();
     syncSettingsChannelButtons();
     openModalStep("confirmation");
+    startLocationReporting();
     toast("Inloggning genomförd via e-post.");
   } catch (error) {
     console.warn("verify-email-code misslyckades:", error);
-    toast("Kunde inte nå API – kontrollera att uvicorn körs.");
+    toast(formatApiConnectionError(error));
   } finally {
     if (verifyBtn) {
       verifyBtn.disabled = false;
@@ -3480,7 +3563,7 @@ async function bootstrapApp() {
   }
 
   renderClosestSiteNow();
-  void loadHeritageSites().then(() => refreshGeoFromApi());
+  await loadHeritageSites();
   await refreshGeoFromApi();
 
   if (urlSiteRef) {
