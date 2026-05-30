@@ -27,11 +27,15 @@ def payment_config():
     provider = (settings.PAYMENT_PROVIDER or "mock").lower()
     secret = settings.STRIPE_SECRET_KEY or ""
     publishable = settings.STRIPE_PUBLISHABLE_KEY or ""
-    stripe_enabled = provider == "stripe" and bool(secret)
+    stripe_configured = provider == "stripe" and bool(secret)
+    demo_use_mock = settings.GEOFENCING_DEMO_MODE and settings.PAYMENT_DEMO_USE_MOCK
+    stripe_enabled = stripe_configured and not demo_use_mock
     return {
         "success": True,
         "provider": provider,
         "stripe_enabled": stripe_enabled,
+        "stripe_configured": stripe_configured,
+        "demo_use_mock": demo_use_mock,
         "stripe_sandbox": secret.startswith("sk_test_"),
         "stripe_publishable_key": publishable if stripe_enabled else None,
     }

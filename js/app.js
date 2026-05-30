@@ -756,9 +756,26 @@ let SUBSCRIPTION_PRICE_SEK = 99;
 let PAYMENT_CONFIG = {
   provider: "mock",
   stripe_enabled: false,
+  stripe_configured: false,
+  demo_use_mock: false,
   stripe_sandbox: false,
   stripe_publishable_key: null,
 };
+
+function formatStripePaymentError(error) {
+  if (!error) return "Betalning misslyckades.";
+  const code = (error.decline_code || error.code || "").toLowerCase();
+  if (
+    code.includes("decline") ||
+    code === "card_declined" ||
+    /nek/i.test(error.message || "")
+  ) {
+    return PAYMENT_CONFIG.stripe_sandbox
+      ? "Kortet nekades. I Stripe testläge: använd 4242 4242 4242 4242, valfritt framtida datum och valfri CVC (t.ex. 123)."
+      : "Betalningsmetoden nekades – prova ett annat kort.";
+  }
+  return error.message || "Betalning misslyckades.";
+}
 let stripeClient = null;
 let stripeElements = null;
 let stripePaymentElement = null;
@@ -2160,6 +2177,7 @@ function selectDuration(element) {
   element.classList.add("selected");
   prototypeState.duration_days = parseInt(element.dataset.days, 10) || 30;
   SUBSCRIPTION_PRICE_SEK = parseInt(element.dataset.price, 10) || SUBSCRIPTION_PRICE_SEK;
+  destroyStripePaymentElement();
   updatePriceSummaryBox();
   if (document.getElementById("payment")?.classList.contains("active")) {
     prepareStripePaymentStep().catch(error => console.error("Stripe reload failed:", error));
@@ -2176,13 +2194,18 @@ async function updatePaymentProviderUi() {
   }
 
   const stripeHint = document.getElementById("stripePaymentHint");
-    if (stripeHint) {
-      if (PAYMENT_CONFIG.stripe_enabled) {
-        const svText = PAYMENT_CONFIG.stripe_sandbox
-          ? "Stripe testläge – ange kortuppgifter nedan. Testkort: 4242 4242 4242 4242."
-          : "Stripe – ange kortuppgifter nedan.";
-        await setElementI18n(stripeHint, svText);
-      } else {
+  if (stripeHint) {
+    if (PAYMENT_CONFIG.demo_use_mock) {
+      await setElementI18n(
+        stripeHint,
+        "Demo-betalning: ange valfritt testkortnummer (t.ex. 4242 4242 4242 4242) – ingen riktig debitering."
+      );
+    } else if (PAYMENT_CONFIG.stripe_enabled) {
+      const svText = PAYMENT_CONFIG.stripe_sandbox
+        ? "Stripe testläge – riktiga kort fungerar inte. Testkort: 4242 4242 4242 4242, valfritt datum/CVC."
+        : "Stripe – ange kortuppgifter nedan.";
+      await setElementI18n(stripeHint, svText);
+    } else {
       stripeHint.textContent =
         "Mock-betalning i demo. Sätt PAYMENT_PROVIDER=stripe och STRIPE_SECRET_KEY i .env för riktig sandbox.";
     }
@@ -2746,7 +2769,7 @@ async function paymentComplete() {
 
       const { error: submitError } = await stripeElements.submit();
       if (submitError) {
-        toast(submitError.message || "Betalning misslyckades.");
+        toast(formatStripePaymentError(submitError));
         return;
       }
 
@@ -2764,7 +2787,7 @@ async function paymentComplete() {
       });
 
       if (result.error) {
-        toast(result.error.message || "Betalning misslyckades.");
+        toast(formatStripePaymentError(result.error));
         return;
       }
 
