@@ -3122,6 +3122,7 @@ async function togglePreference(element) {
   const source = element.dataset.i18nSource || element.textContent.trim();
   const isMarkingVisited = source === I18N_SV.PREF_ACTIVE;
 
+  const resetBtn = document.getElementById("resetVisitedBtn");
   if (isMarkingVisited) {
     await setElementI18n(element, I18N_SV.PREF_INACTIVE);
     element.style.background = "var(--success-bg)";
@@ -3131,6 +3132,7 @@ async function togglePreference(element) {
     if (!prototypeState.visited_sites.includes(currentSite.site_id)) {
       prototypeState.visited_sites.push(currentSite.site_id);
     }
+    if (resetBtn) resetBtn.style.display = "";
   } else {
     await setElementI18n(element, I18N_SV.PREF_ACTIVE);
     element.style.background = "var(--danger-bg)";
@@ -3140,6 +3142,7 @@ async function togglePreference(element) {
     prototypeState.visited_sites = prototypeState.visited_sites.filter(
       site => site !== currentSite.site_id
     );
+    if (resetBtn) resetBtn.style.display = "none";
   }
 
   const payload = buildPreferencesPayload({
@@ -3154,6 +3157,31 @@ async function togglePreference(element) {
   );
 
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
+}
+
+async function resetSiteNotifications() {
+  prototypeState.visited_sites = prototypeState.visited_sites.filter(
+    site => site !== currentSite.site_id
+  );
+
+  const prefBox = document.querySelector(".preference-box");
+  if (prefBox) {
+    await setElementI18n(prefBox, I18N_SV.PREF_ACTIVE);
+    prefBox.style.background = "var(--danger-bg)";
+    prefBox.style.color = "var(--danger)";
+    prefBox.style.borderColor = "#e58c8c";
+  }
+
+  const btn = document.getElementById("resetVisitedBtn");
+  if (btn) btn.style.display = "none";
+
+  const payload = buildPreferencesPayload({
+    site_id: currentSite.site_id,
+    visited: false,
+  });
+
+  await patchToApi(API_ENDPOINTS.updatePreferences, payload);
+  toast(await translateUiText("Du kommer få SMS om detta världsarv igen.", getActiveReaderLang()));
 }
 
 function cancelSubscription() {
@@ -3505,6 +3533,7 @@ window.loginWithSmsCode = loginWithSmsCode;
 window.loginWithEmailCode = loginWithEmailCode;
 window.paymentComplete = paymentComplete;
 window.togglePreference = togglePreference;
+window.resetSiteNotifications = resetSiteNotifications;
 window.cancelSubscription = cancelSubscription;
 window.previewNotificationPayload = previewNotificationPayload;
 window.updateContactField = updateContactField;
