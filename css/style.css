@@ -633,6 +633,12 @@
       padding: 24px;
     }
 
+    #siteDetailDescription {
+      margin: 0;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+
     .meta {
       margin: 4px 0 18px;
       color: var(--muted);

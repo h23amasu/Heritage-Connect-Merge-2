@@ -284,6 +284,31 @@ function getUnescoDescription(site, lang) {
   return text && String(text).trim() ? String(text).trim() : null;
 }
 
+function pickUnescoDescriptionSource(site, targetLang) {
+  const target = (targetLang || "sv").toLowerCase().slice(0, 2);
+  const localized = getUnescoDescription(site, target);
+  const english = getUnescoDescription(site, "en") || site?.description || "";
+
+  if (localized) {
+    // desc_sv m.m. kan vara korta introtexter – använd full UNESCO-text när den finns.
+    if (english && localized.length < english.length * 0.6) {
+      return { text: english, lang: "en" };
+    }
+    return { text: localized, lang: target };
+  }
+
+  if (english) {
+    return { text: english, lang: "en" };
+  }
+
+  const swedish = getUnescoDescription(site, "sv");
+  if (swedish) {
+    return { text: swedish, lang: "sv" };
+  }
+
+  return { text: "", lang: target };
+}
+
 function getUnescoSiteName(site, lang) {
   const key = `name_${lang}`;
   const text = site?.[key];
@@ -301,16 +326,7 @@ function getUnescoSiteName(site, lang) {
  */
 async function resolveSiteDescription(site, targetLang = getActiveReaderLang()) {
   const target = (targetLang || "sv").toLowerCase().slice(0, 2);
-
-  const unescoText = getUnescoDescription(site, target);
-  if (unescoText) {
-    return unescoText;
-  }
-
-  const svText = getUnescoDescription(site, "sv");
-  const englishText = getUnescoDescription(site, "en") || site?.description || "";
-  const sourceText = svText || englishText;
-  const sourceLang = svText ? "sv" : "en";
+  const { text: sourceText, lang: sourceLang } = pickUnescoDescriptionSource(site, target);
 
   if (!sourceText) {
     return "";
