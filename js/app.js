@@ -559,7 +559,29 @@ const SWEDISH_GEO_FALLBACK = [
 ];
 
 let LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
+/** Full UNESCO-post per unesco_id – texter även när geo-filen saknar desc_xx. */
+const HERITAGE_TEXT_BY_ID = new Map();
 let heritageSitesLoadPromise = null;
+
+function indexHeritageSiteTexts(sites) {
+  if (!Array.isArray(sites)) return;
+  for (const site of sites) {
+    const id = String(site?.unesco_id || site?.id || "");
+    if (id) HERITAGE_TEXT_BY_ID.set(id, site);
+  }
+}
+
+function mergeHeritageSiteTexts(site) {
+  if (!site) return site;
+  const id = String(site.unesco_id || site.id || "");
+  const full = id ? HERITAGE_TEXT_BY_ID.get(id) : null;
+  if (!full) return site;
+
+  const textFields = Object.fromEntries(
+    Object.entries(full).filter(([key]) => key.startsWith("desc_") || key.startsWith("name_"))
+  );
+  return { ...full, ...site, ...textFields };
+}
 
 async function enrichHeritageSitesFromFullData() {
   try {
@@ -567,9 +589,9 @@ async function enrichHeritageSitesFromFullData() {
     if (!response.ok) return;
     const fullSites = await response.json();
     if (Array.isArray(fullSites) && fullSites.length > 0) {
+      indexHeritageSiteTexts(fullSites);
       LOCAL_HERITAGE_SITES = fullSites;
       console.info(`UNESCO fullständig databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-      await refreshGeoFromApi();
     }
   } catch (error) {
     console.debug("Kunde inte ladda fullständig UNESCO-data i bakgrunden.", error);
@@ -584,8 +606,9 @@ async function loadHeritageSitesOnce() {
         throw new Error(`HTTP ${response.status}`);
       }
       LOCAL_HERITAGE_SITES = await response.json();
+      indexHeritageSiteTexts(LOCAL_HERITAGE_SITES);
       console.info(`UNESCO-geodata laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-      void enrichHeritageSitesFromFullData();
+      await enrichHeritageSitesFromFullData();
       return LOCAL_HERITAGE_SITES;
     } catch (err) {
       if (attempt < 2) {
@@ -735,23 +758,24 @@ function findClosestSiteLocal(lat, lng) {
     if (d < minDist) { minDist = d; closest = site; }
   }
   if (!closest) return null;
-  console.log("Närmaste:", closest.name, `(id ${closest.unesco_id}, ${(minDist).toFixed(1)} km)`);
+  const site = mergeHeritageSiteTexts(closest);
+  console.log("Närmaste:", site.name, `(id ${site.unesco_id}, ${(minDist).toFixed(1)} km)`);
   const descriptions = Object.fromEntries(
-    Object.entries(closest).filter(([key]) => key.startsWith("desc_"))
+    Object.entries(site).filter(([key]) => key.startsWith("desc_"))
   );
   const names = Object.fromEntries(
-    Object.entries(closest).filter(([key]) => key.startsWith("name_"))
+    Object.entries(site).filter(([key]) => key.startsWith("name_"))
   );
   return {
-    name: closest.name,
-    country: closest.country,
-    image_url: resolveSiteImageUrl(closest),
-    description: closest.description || null,
+    name: site.name,
+    country: site.country,
+    image_url: resolveSiteImageUrl(site),
+    description: site.description || null,
     ...descriptions,
     ...names,
     distance_m: Math.round(minDist * 1000),
-    unesco_id: closest.unesco_id || null,
-    year_inscribed: closest.year_inscribed || null,
+    unesco_id: site.unesco_id || null,
+    year_inscribed: site.year_inscribed || null,
   };
 }
 
@@ -1349,7 +1373,7 @@ async function applyClosestSiteToUi(site) {
   const siteName = await resolveSiteName(site);
   if (isStaleUiApply(seq)) return;
 
-  const displayDesc = await resolveSiteDescription(site);
+  const displayDesc = await resolveSiteDescription(site, getActiveReaderLang());
   if (isStaleUiApply(seq)) return;
 
   const siteImageId = site.unesco_id || site.id;
@@ -3509,7 +3533,7 @@ async function bootstrapApp() {
   }
 
   renderClosestSiteNow();
-  void loadHeritageSites().then(() => refreshGeoFromApi());
+  await loadHeritageSites();
   await refreshGeoFromApi();
 
   if (urlSiteRef) {
