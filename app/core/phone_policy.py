@@ -3,13 +3,13 @@ Telefonnummer som aldrig får användas i tester eller API-anrop (SMS/geofencing
 """
 import re
 
-# Normaliserade E.164 (+46…) och lokala varianter
+# Reserverade testnummer – blockeras i API (skicka aldrig riktiga SMS hit i automatiska tester).
+# Lägg INTE till riktiga teammedlemmars nummer här.
 BLOCKED_PHONE_NUMBERS = frozenset(
     {
-        "+46761104465",
-        "46761104465",
-        "0761104465",
-        "761104465",
+        "+46700000000",
+        "46700000000",
+        "0700000000",
     }
 )
 
@@ -39,5 +39,5 @@ def is_blocked_phone(phone: str) -> bool:
         return False
     if key in BLOCKED_PHONE_NUMBERS:
         return True
-    # 0761104465 → +46761104465
+    # 0700000000 → +46700000000
     return normalize_phone_key(key) in BLOCKED_PHONE_NUMBERS

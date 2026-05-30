@@ -61,7 +61,7 @@ def test_notification_blocked_phone():
         "/notification/send-notification",
         json={
             "type": "sms",
-            "to": "0761104465",
+            "to": "0700000000",
             "message": "Hej!",
         },
     )

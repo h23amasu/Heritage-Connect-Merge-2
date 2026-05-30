@@ -2553,9 +2553,9 @@ async function loginWithSmsCode() {
       return;
     }
 
-    prototypeState.phone = phone;
+    prototypeState.phone = normalizePhoneForApi(phone);
     prototypeState.channel = "sms";
-    prototypeState.user_id = data.user_id || phone;
+    prototypeState.user_id = data.user_id || normalizePhoneForApi(phone);
     prototypeState.access_token = data.access_token || null;
     prototypeState.subscription_active = true;
 
@@ -2681,7 +2681,8 @@ function getRecipientValue() {
     return prototypeState.email || "";
   }
 
-  return prototypeState.phone || "";
+  const phone = prototypeState.phone || "";
+  return phone ? normalizePhoneForApi(phone) : "";
 }
 
 function getChannelLabel() {
@@ -2937,7 +2938,12 @@ async function sendToApi(endpoint, payload) {
     console.log("API-svar:", result);
 
     if (!response.ok) {
-      toast(`API-fel: ${result.error || "okänt fel"}`);
+      const err = result.error || "okänt fel";
+      if (err === "invalid_recipient") {
+        toast("API-fel: ogiltigt mobilnummer – använd format +46701234567");
+      } else {
+        toast(`API-fel: ${err}`);
+      }
       return result;
     }
 
@@ -3010,7 +3016,7 @@ function askForMissingContact(channel) {
     return false;
   }
 
-  prototypeState.phone = phone.trim();
+  prototypeState.phone = normalizePhoneForApi(phone.trim());
   return true;
 }
 
