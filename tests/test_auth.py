@@ -12,7 +12,12 @@ def setup_function():
     _email_otp_store.clear()
 
 
-def test_bankid_mock_flow():
+def test_bankid_mock_flow(monkeypatch):
+    monkeypatch.setenv("BANKID_PROVIDER", "mock")
+    from app.core.config import settings
+
+    settings.BANKID_PROVIDER = "mock"
+
     start = client.post("/api/auth/bankid/start")
     assert start.status_code == 200
     payload = start.json()

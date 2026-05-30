@@ -1397,6 +1397,7 @@ function applyTestPosition(value) {
   lastClosestSite = null;
   setGeoCoords(lat, lng, "test");
   refreshGeoFromApi();
+  void reportLocationToApi();
 }
 
 function readUrlPosition() {
@@ -1481,6 +1482,7 @@ function onGeoPosition(pos) {
   geoState.longitude = lng;
   geoState.source = "gps";
   void refreshGeoFromApi();
+  void reportLocationToApi();
 }
 
 function onGeoError(err) {
@@ -2153,17 +2155,30 @@ async function updatePaymentProviderUi() {
   }
 }
 
+function normalizePhoneForApi(phone) {
+  let value = String(phone || "").trim().replace(/[\s-]/g, "");
+  if (!value) return "";
+  if (value.startsWith("0") && value.length >= 9) {
+    value = `+46${value.slice(1)}`;
+  }
+  if (!value.startsWith("+")) {
+    value = `+${value}`;
+  }
+  return value;
+}
+
 function buildPreferencesPayload(extra = {}) {
+  const phone = prototypeState.phone ? normalizePhoneForApi(prototypeState.phone) : undefined;
   return {
     user_id: prototypeState.user_id,
-    phone: prototypeState.phone || undefined,
+    phone: phone || undefined,
     email: prototypeState.email || undefined,
     ...extra,
   };
 }
 
 function getLocationReportPhone() {
-  const phone = (prototypeState.phone || "").trim();
+  const phone = normalizePhoneForApi(prototypeState.phone || "");
   if (!phone || isPlaceholderContact(phone) || phone === "bankid-user") {
     return null;
   }
@@ -2188,8 +2203,18 @@ async function reportLocationToApi() {
       body: JSON.stringify(payload),
     });
     const data = await response.json();
+    if (!response.ok) {
+      console.warn("location/update:", data);
+      return;
+    }
     if (data.notified && data.nearest_site?.name) {
-      toast(`Notis skickad – du är nära ${data.nearest_site.name}.`);
+      toast(`SMS skickat – du är nära ${data.nearest_site.name}.`);
+      if (data.nearest_site.unesco_id || data.nearest_site.id) {
+        const siteId = String(data.nearest_site.unesco_id || data.nearest_site.id);
+        if (!prototypeState.visited_sites.includes(siteId)) {
+          prototypeState.visited_sites.push(siteId);
+        }
+      }
     }
   } catch (error) {
     console.debug("location/update:", error);
@@ -2300,7 +2325,7 @@ function createSubscriptionDraft() {
       toast("Ange ett giltigt mobilnummer.");
       return;
     }
-    prototypeState.phone = contactValue;
+    prototypeState.phone = normalizePhoneForApi(contactValue);
     prototypeState.email = "";
   }
 

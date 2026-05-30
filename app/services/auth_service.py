@@ -24,7 +24,7 @@ DEV_OTP_CODE = "123456"
 
 
 def normalize_phone(phone: str) -> str:
-    p = phone.strip().replace(" ", "")
+    p = phone.strip().replace(" ", "").replace("-", "")
     if p.startswith("0") and len(p) >= 9:
         return "+46" + p[1:]
     if not p.startswith("+"):

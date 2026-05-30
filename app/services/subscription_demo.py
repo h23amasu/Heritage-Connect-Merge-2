@@ -12,6 +12,7 @@ from app.schemas import (
     SubscriptionFlowResponse,
     SubscriptionPauseRequest,
 )
+from app.services.auth_service import normalize_phone
 from app.services.geofencing_demo import _demo_users
 from app.services.receipt_service import send_subscription_receipt
 from app.services.payment_service import process_payment
@@ -31,7 +32,7 @@ def _subscription_user_key(body: SubscriptionFlowCreateRequest) -> str:
     phone = body.phone or body.to
     if not phone:
         raise ValueError("phone required for SMS subscription")
-    return phone
+    return normalize_phone(phone)
 
 
 def create_demo_subscription(

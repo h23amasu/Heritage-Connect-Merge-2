@@ -10,7 +10,8 @@ from app.core.database import get_db
 from app.models.payment import UserVisitedSite
 from app.models.user import User
 from app.schemas import UserPreferencesRequest, UserPreferencesResponse
-from app.services.geofencing_demo import _demo_users
+from app.services.geofencing_demo import _demo_users, clear_demo_site_notified, mark_demo_site_notified
+from app.services.auth_service import normalize_phone
 
 router = APIRouter(prefix="/api/user", tags=["User preferences"])
 
@@ -128,7 +129,15 @@ def update_preferences(
         if body.email:
             d["email"] = body.email.strip().lower()
         if body.phone:
-            d["phone"] = body.phone
+            d["phone"] = normalize_phone(body.phone)
+        if body.visited is not None and body.site_id:
+            notify_user = d.get("phone") or key
+            if notify_user and "@" not in str(notify_user):
+                notify_user = normalize_phone(str(notify_user))
+            if body.visited:
+                mark_demo_site_notified(notify_user, str(body.site_id))
+            else:
+                clear_demo_site_notified(notify_user, str(body.site_id))
         return UserPreferencesResponse(
             success=True,
             user_id=key,
