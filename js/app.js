@@ -227,11 +227,6 @@ const UI_MODAL_I18N = {
     "INNEHÅLLSPREFERENSER": "CONTENT PREFERENCES",
     "Markera som besökt, inga fler SMS om detta världsarv":
       "Mark as visited, no more SMS about this world heritage site",
-    "FRÅGA AI OM DETTA VÄRLDSARV": "ASK AI ABOUT THIS WORLD HERITAGE SITE",
-    "Ställ en fråga om det världsarv du är nära. AI:n svarar bara från lokala UNESCO-källor.":
-      "Ask a question about the world heritage site you are near. The AI only answers from local UNESCO sources.",
-    "Vad är unikt med detta världsarv?": "What is unique about this world heritage site?",
-    "Fråga": "Ask",
     "PRENUMERATION": "SUBSCRIPTION",
     "Avsluta prenumeration": "Cancel subscription",
     "Dessa inställningar kräver inloggning och visas bara för aktiva prenumeranter.":
@@ -273,10 +268,6 @@ const I18N_SV = {
   VERIFYING: "Verifierar…",
   LOGIN: "Logga in",
   PAYING: "Betalar…",
-  AI_LOADING: "Hämtar svar…",
-  AI_ERROR: "Kunde inte hämta svar.",
-  AI_EMPTY: "Inget svar.",
-  AI_OFFLINE: "API:t är inte igång – demo-läge."
 };
 
 const RTL_LANGS = new Set(["ar", "he", "fa", "ur"]);
@@ -523,7 +514,6 @@ function buildApiEndpoints(baseUrl) {
     paymentIntent: `${base}/api/payments/intent`,
     translate: `${base}/api/translate`,
     translateBatch: `${base}/api/translate/batch`,
-    aiAsk: `${base}/api/ai/ask`,
   };
 }
 
@@ -3319,54 +3309,6 @@ function togglePolicy(event) {
   if (details) details.open = !details.open;
 }
 
-async function askAiQuestion() {
-  const input = document.getElementById("aiQuestionInput");
-  const answerBox = document.getElementById("aiAnswer");
-  const question = input ? input.value.trim() : "";
-
-  if (!question) {
-    toast("Skriv en fråga först.");
-    return;
-  }
-
-  if (answerBox) {
-    await setElementI18n(answerBox, I18N_SV.AI_LOADING);
-    answerBox.dataset.i18nDynamic = "true";
-  }
-
-  const payload = {
-    site_id: currentSite.site_id || currentSite.name,
-    question,
-    user_id: prototypeState.user_id,
-    language: currentSite.language || NEWSPAPER_LANG,
-  };
-
-  try {
-    const response = await fetch(API_ENDPOINTS.aiAsk, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      if (answerBox) {
-        delete answerBox.dataset.i18nDynamic;
-        await setElementI18n(answerBox, I18N_SV.AI_ERROR);
-      }
-      return;
-    }
-    if (answerBox) {
-      answerBox.dataset.i18nDynamic = "true";
-      answerBox.textContent = data.answer || I18N_SV.AI_EMPTY;
-    }
-  } catch (_) {
-    if (answerBox) {
-      delete answerBox.dataset.i18nDynamic;
-      await setElementI18n(answerBox, I18N_SV.AI_OFFLINE);
-    }
-  }
-}
-
 function toast(message) {
   const toastEl = document.getElementById("toast");
   if (!toastEl) return;
@@ -3506,5 +3448,4 @@ window.bootstrapApp = bootstrapApp;
 window.applyTestPosition = applyTestPosition;
 window.loginWithBankId = loginWithBankId;
 window.togglePolicy = togglePolicy;
-window.askAiQuestion = askAiQuestion;
 window.selectDuration = selectDuration;
