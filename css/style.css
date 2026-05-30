@@ -339,6 +339,20 @@
       font-size: 15px;
     }
 
+    .article-column--primary {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .article-column-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .article-column--secondary {
+      display: flex;
+      flex-direction: column;
+    }
+
     .article-image {
       display: block;
       width: 100%;
