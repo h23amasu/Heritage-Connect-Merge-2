@@ -19,6 +19,8 @@ def test_public_site_by_unesco_id():
     assert data["success"] is True
     assert data["unesco_id"] == "1027"
     assert "Falun" in data["name"]
+    assert "Stora stöten" in data["description"]
+    assert "Great Pit" not in data["description"]
 
 
 def test_site_landing_html():

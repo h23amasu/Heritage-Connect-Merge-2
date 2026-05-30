@@ -15,16 +15,19 @@ def load_local_documents(site_id: int | str) -> List[Tuple[str, str]]:
     if not DATA_PDF_DIR.exists():
         return []
 
-    sid = str(site_id).lower()
+    sid = str(site_id).strip().lower()
     results: List[Tuple[str, str]] = []
 
     for path in sorted(DATA_PDF_DIR.iterdir()):
         if path.suffix.lower() not in (".txt", ".pdf"):
             continue
         name_lower = path.stem.lower()
-        if sid not in name_lower and sid != "1" and "engelsberg" not in name_lower:
-            if path.name != "engelsbergs_bruk.txt":
-                continue
+        if sid in name_lower:
+            pass
+        elif sid in ("1", "engelsberg") and "engelsberg" in name_lower:
+            pass
+        else:
+            continue
 
         content = _read_file(path)
         if content.strip():

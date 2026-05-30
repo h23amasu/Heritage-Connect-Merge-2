@@ -34,3 +34,19 @@ def test_ai_ask_we_return():
     data = response.json()
     assert "återkommer" in data["answer"].lower()
     assert data["needs_followup"] is True
+
+
+def test_ai_ask_falun_generic_question():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "Vad är unikt med detta världsarv?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    assert "Stora stöten" in data["answer"] or "Falun" in data["answer"]
+    assert "engelsbergs_bruk.txt" not in data["sources"]

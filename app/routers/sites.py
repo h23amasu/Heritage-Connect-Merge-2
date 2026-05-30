@@ -43,6 +43,8 @@ def _best_site_description(site: dict, lang: str = "sv") -> str:
     lang = (lang or "sv").lower()[:2]
     desc_en = (site.get("desc_en") or site.get("description") or "").strip()
     localized = (site.get(f"desc_{lang}") or "").strip()
+    if lang == "sv" and localized:
+        return localized
     if localized and desc_en and len(localized) < len(desc_en) * 0.6:
         return desc_en
     return localized or desc_en or ""

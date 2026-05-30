@@ -24,7 +24,11 @@
 
   function pickDescription(site) {
     const key = `desc_${lang}`;
-    return site[key] || site.description || site.desc_en || site.desc_sv || "";
+    const localized = site[key] || "";
+    if (lang === "sv") {
+      return localized || site.desc_sv || site.description || site.desc_en || "";
+    }
+    return localized || site.description || site.desc_en || site.desc_sv || "";
   }
 
   function renderSite(site) {
@@ -142,11 +146,19 @@
         }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "AI request failed");
+      }
       if (answerBox) {
         answerBox.textContent = data.answer || "Inget svar tillgängligt.";
       }
-    } catch (_) {
-      if (answerBox) answerBox.textContent = "Kunde inte nå AI-tjänsten.";
+    } catch (error) {
+      if (answerBox) {
+        answerBox.textContent =
+          error?.message && error.message !== "AI request failed"
+            ? `Kunde inte nå AI-tjänsten: ${error.message}`
+            : "Kunde inte nå AI-tjänsten.";
+      }
     }
   }
 
