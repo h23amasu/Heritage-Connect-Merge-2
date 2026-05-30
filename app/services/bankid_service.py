@@ -85,6 +85,15 @@ def _launch_url(auto_start_token: str) -> str:
 
 def mock_start() -> dict:
     order_ref = secrets.token_hex(16)
+    qr_start_token = secrets.token_urlsafe(12)
+    qr_start_secret = secrets.token_hex(16)
+    start_time = int(time.time())
+    _order_meta[order_ref] = {
+        "qr_start_token": qr_start_token,
+        "qr_start_secret": qr_start_secret,
+        "start_time": start_time,
+        "mock": True,
+    }
     return {
         "success": True,
         "mock": True,
@@ -92,7 +101,7 @@ def mock_start() -> dict:
         "order_ref": order_ref,
         "auto_start_token": None,
         "bankid_launch_url": None,
-        "message": "BankID mock – bekräftas automatiskt.",
+        "message": "BankID demo – skanna QR-koden. Bekräftas automatiskt efter några sekunder.",
     }
 
 
@@ -157,12 +166,28 @@ def get_qr_content(order_ref: str) -> Optional[str]:
     )
 
 
+MOCK_BANKID_QR_SECONDS = 3
+
+
 def collect_order(order_ref: str, issue_session) -> dict:
     if not order_ref:
         return {"status": "failed", "error": "invalid_order_ref"}
 
     if not bankid_configured():
+        meta = _order_meta.get(order_ref)
+        if not meta:
+            return {"status": "failed", "error": "order_not_found"}
+
+        elapsed = int(time.time()) - int(meta.get("start_time") or 0)
+        if elapsed < MOCK_BANKID_QR_SECONDS:
+            return {
+                "status": "pending",
+                "hint_code": "userSign",
+                "mock": True,
+            }
+
         token = issue_session(f"bankid:{order_ref[:8]}")
+        _order_meta.pop(order_ref, None)
         return {
             "status": "complete",
             "access_token": token,

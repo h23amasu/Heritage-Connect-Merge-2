@@ -1,7 +1,10 @@
 """Tester för auth-API."""
+import time
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services import bankid_service
 from app.services.auth_service import _email_otp_store, _otp_store
 
 client = TestClient(app)
@@ -10,6 +13,7 @@ client = TestClient(app)
 def setup_function():
     _otp_store.clear()
     _email_otp_store.clear()
+    bankid_service._order_meta.clear()
 
 
 def test_bankid_mock_flow(monkeypatch):
@@ -24,6 +28,20 @@ def test_bankid_mock_flow(monkeypatch):
     assert payload["success"] is True
     assert payload.get("mock") is True
     assert payload.get("order_ref")
+
+    qr = client.get(f"/api/auth/bankid/qr?order_ref={payload['order_ref']}")
+    assert qr.status_code == 200
+    assert qr.json().get("qr_content")
+
+    collect_pending = client.post(
+        "/api/auth/bankid/collect",
+        json={"order_ref": payload["order_ref"]},
+    )
+    assert collect_pending.status_code == 200
+    assert collect_pending.json()["status"] == "pending"
+
+    meta = bankid_service._order_meta[payload["order_ref"]]
+    meta["start_time"] = int(time.time()) - bankid_service.MOCK_BANKID_QR_SECONDS - 1
 
     collect = client.post(
         "/api/auth/bankid/collect",

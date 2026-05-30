@@ -3265,8 +3265,10 @@ async function loginWithBankId() {
     }
 
     if (startData.mock) {
-      showBankIdStatusPanel("BankID demo – bekräftar automatiskt…");
-      await sleep(800);
+      showBankIdStatusPanel(
+        startData.message || "BankID demo – skanna QR-koden.",
+        { showQr: true }
+      );
     } else {
       showBankIdStatusPanel(
         startData.message || "Öppna BankID-appen och godkänn inloggningen.",
@@ -3279,14 +3281,15 @@ async function loginWithBankId() {
       if (startData.bankid_launch_url) {
         window.open(startData.bankid_launch_url, "_blank", "noopener,noreferrer");
       }
-
-      await refreshBankIdQr(startData.order_ref);
-      qrTimer = window.setInterval(() => {
-        refreshBankIdQr(startData.order_ref).catch(() => {});
-      }, 1000);
     }
 
-    const result = await pollBankIdCollect(startData.order_ref);
+    await refreshBankIdQr(startData.order_ref);
+    qrTimer = window.setInterval(() => {
+      refreshBankIdQr(startData.order_ref).catch(() => {});
+    }, 1000);
+
+    const pollIntervalMs = startData.mock ? 1000 : 2000;
+    const result = await pollBankIdCollect(startData.order_ref, { intervalMs: pollIntervalMs });
     finishBankIdLogin(result);
   } catch (error) {
     console.warn("BankID misslyckades:", error);
