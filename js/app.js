@@ -236,7 +236,24 @@ const UI_MODAL_I18N = {
       "You will no longer receive world heritage notifications. Thank you for using Heritage Connect.",
     "Tillbaka till världsarvet": "Back to the world heritage site",
     "Ca 71 km bort": "Approx. 71 km away",
-    "Ca 1.7 km bort": "Approx. 1.7 km away"
+    "Ca 1.7 km bort": "Approx. 1.7 km away",
+    "Hämtar närmaste världsarv…": "Finding nearest world heritage site…",
+    "Hämtar avstånd…": "Calculating distance…",
+    "Hämtar världsarv…": "Loading world heritage site…",
+    "Avstånd okänt": "Distance unknown",
+    "Avstånd från din position kunde inte beräknas": "Distance from your location could not be calculated",
+    "För att byta till e-postnotiser behöver du ange en e-postadress.":
+      "To switch to email notifications, enter an email address.",
+    "För att byta till SMS-notiser behöver du ange ett mobilnummer.":
+      "To switch to SMS notifications, enter a mobile number.",
+    "E-postnotiser kräver en giltig e-postadress.": "Email notifications require a valid email address.",
+    "SMS-notiser kräver ett mobilnummer.": "SMS notifications require a mobile number.",
+    "Notiskanal uppdaterad till E-postnotiser.": "Notification channel updated to email notifications.",
+    "Notiskanal uppdaterad till SMS-notiser.": "Notification channel updated to SMS notifications.",
+    "En bekräftelse har skickats via SMS.": "A confirmation has been sent via SMS.",
+    "En bekräftelse har skickats via e-post.": "A confirmation has been sent via email.",
+    " E-postkvitto skickades.": " A receipt email was sent.",
+    " Prenumerationen gäller till ": " Subscription valid until "
   }
 };
 
@@ -285,7 +302,10 @@ function pickUnescoDescriptionSource(site, targetLang) {
   const english = getUnescoDescription(site, "en") || site?.description || "";
 
   if (localized) {
-    // desc_sv m.m. kan vara korta introtexter – använd full UNESCO-text när den finns.
+    if (target === "sv") {
+      return { text: localized, lang: target };
+    }
+    // desc_xx kan vara korta introtexter – använd full UNESCO-text när den finns.
     if (english && localized.length < english.length * 0.6) {
       return { text: english, lang: "en" };
     }
@@ -1139,16 +1159,19 @@ function renderClosestSiteNow() {
 function showGeoLoadingState() {
   const adName = document.getElementById("adSiteName");
   if (adName?.dataset.i18nDynamic === "true" && adName.textContent?.trim()) {
-    return;
+    return Promise.resolve();
   }
   const adPill = document.getElementById("heritageDistancePill");
   const title = document.getElementById("siteDetailTitle");
   const detailDist = document.getElementById("siteDetailDistance");
+  const lang = getActiveReaderLang();
 
-  if (adName) adName.textContent = I18N_SV.LOADING_CLOSEST;
-  if (adPill) adPill.textContent = I18N_SV.LOADING_DISTANCE;
-  if (title) title.textContent = I18N_SV.LOADING_SITE;
-  if (detailDist) detailDist.textContent = I18N_SV.LOADING_DISTANCE;
+  const tasks = [];
+  if (adName) tasks.push(setElementI18n(adName, I18N_SV.LOADING_CLOSEST, lang));
+  if (adPill) tasks.push(setElementI18n(adPill, I18N_SV.LOADING_DISTANCE, lang));
+  if (title) tasks.push(setElementI18n(title, I18N_SV.LOADING_SITE, lang));
+  if (detailDist) tasks.push(setElementI18n(detailDist, I18N_SV.LOADING_DISTANCE, lang));
+  return Promise.all(tasks).catch(() => {});
 }
 
 async function refreshGeoUiSafeguard() {
@@ -1457,6 +1480,23 @@ function readUrlSiteRef() {
   return (params.get("site") || "").trim();
 }
 
+function readUrlStep() {
+  const params = new URLSearchParams(window.location.search);
+  const step = (params.get("step") || "").trim().toLowerCase();
+  if (step === "profile") {
+    return "confirmation";
+  }
+  return step;
+}
+
+function readUrlLang() {
+  const params = new URLSearchParams(window.location.search);
+  const lang = (params.get("lang") || "").trim();
+  if (!lang) return null;
+  const normalized = normalizeLanguageCode(lang);
+  return isValidLanguageCode(normalized) ? normalized : null;
+}
+
 async function applySiteFromRef(siteRef) {
   if (!siteRef) return;
 
@@ -1483,7 +1523,7 @@ async function applySiteFromRef(siteRef) {
   }
 
   try {
-    const lang = getNewspaperLang();
+    const lang = getActiveReaderLang();
     const response = await fetch(
       `${API_BASE_URL}/api/sites/public/${encodeURIComponent(siteRef)}?lang=${lang}`
     );
@@ -1950,6 +1990,20 @@ async function applyDynamicLanguageContent(target) {
   }
   if (lastClosestSite) {
     await refreshClosestSiteTextOnly(lastClosestSite, target);
+  } else {
+    await showGeoLoadingState();
+  }
+
+  if (document.getElementById("confirmation")?.classList.contains("active")) {
+    await updateConfirmationMessage();
+    syncSettingsChannelButtons();
+  }
+  if (document.getElementById("subscribe")?.classList.contains("active")) {
+    updateContactField();
+  }
+  if (document.getElementById("payment")?.classList.contains("active")) {
+    await updatePaymentProviderUi();
+    await updatePriceSummaryBox();
   }
 }
 
@@ -2101,7 +2155,7 @@ function openModalStep(step) {
       await updatePriceSummaryBox();
       await prepareStripePaymentStep();
     }
-    await updateModalProgressTitle(getNewspaperLang());
+    await updateModalProgressTitle(getActiveReaderLang());
 
     const stepLabel = document.getElementById("stepLabel");
     if (stepLabel && target.dataset.i18nTitle) {
@@ -2678,7 +2732,10 @@ async function updateConfirmationMessage(extra) {
 
   if (!confirmationMessage) return;
 
-  let text = `En bekräftelse har skickats via ${getChannelLabel()}.`;
+  let text =
+    prototypeState.channel === "email"
+      ? "En bekräftelse har skickats via e-post."
+      : "En bekräftelse har skickats via SMS.";
   if (extra?.receipt_sent) {
     text += " E-postkvitto skickades.";
   }
@@ -2975,14 +3032,18 @@ function hasSavedContactForChannel(channel) {
   );
 }
 
-function askForMissingContact(channel) {
+async function askForMissingContact(channel) {
+  const lang = getActiveReaderLang();
+
   if (channel === "email") {
-    const email = window.prompt(
-      "För att byta till e-postnotiser behöver du ange en e-postadress."
+    const promptText = await translateUiText(
+      "För att byta till e-postnotiser behöver du ange en e-postadress.",
+      lang
     );
+    const email = window.prompt(promptText);
 
     if (!email || !email.includes("@") || isPlaceholderContact(email)) {
-      toast("E-postnotiser kräver en giltig e-postadress.");
+      toast(await translateUiText("E-postnotiser kräver en giltig e-postadress.", lang));
       return false;
     }
 
@@ -2990,12 +3051,14 @@ function askForMissingContact(channel) {
     return true;
   }
 
-  const phone = window.prompt(
-    "För att byta till SMS-notiser behöver du ange ett mobilnummer."
+  const promptText = await translateUiText(
+    "För att byta till SMS-notiser behöver du ange ett mobilnummer.",
+    lang
   );
+  const phone = window.prompt(promptText);
 
   if (!phone || phone.trim().length < 5 || isPlaceholderContact(phone)) {
-    toast("SMS-notiser kräver ett mobilnummer.");
+    toast(await translateUiText("SMS-notiser kräver ett mobilnummer.", lang));
     return false;
   }
 
@@ -3027,7 +3090,7 @@ async function updateSettingsChannel(element, channel) {
   const previousChannel = prototypeState.channel;
 
   if (!hasSavedContactForChannel(channel)) {
-    const contactWasAdded = askForMissingContact(channel);
+    const contactWasAdded = await askForMissingContact(channel);
 
     if (!contactWasAdded) {
       prototypeState.channel = previousChannel;
@@ -3050,8 +3113,9 @@ async function updateSettingsChannel(element, channel) {
 
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
 
-  const channelText = channel === "email" ? "E-postnotiser" : "SMS-notiser";
-  toast(`Notiskanal uppdaterad till ${channelText}.`);
+  const channelText =
+    channel === "email" ? "Notiskanal uppdaterad till E-postnotiser." : "Notiskanal uppdaterad till SMS-notiser.";
+  toast(await translateUiText(channelText, getActiveReaderLang()));
 }
 
 async function togglePreference(element) {
@@ -3368,6 +3432,11 @@ updateTodayDate();
 async function bootstrapApp() {
   const urlPos = readUrlPosition();
   const urlSiteRef = readUrlSiteRef();
+  const urlLang = readUrlLang();
+
+  if (urlLang) {
+    syncDemoLanguageSelectToLang(urlLang);
+  }
 
   if (urlPos) {
     stopGeoWatch();
@@ -3398,6 +3467,11 @@ async function bootstrapApp() {
     await applyReaderLanguage(finalLang);
   } else {
     syncReaderLanguageUi("sv");
+  }
+
+  const urlStep = readUrlStep();
+  if (urlStep === "confirmation") {
+    openServiceModal("confirmation");
   }
 }
 

@@ -52,7 +52,14 @@
       };
     }
     if (profileLink) {
-      profileLink.href = `/demo?site=${encodeURIComponent(uid)}`;
+      const profileParams = new URLSearchParams({
+        site: uid,
+        step: "confirmation",
+      });
+      if (lang) {
+        profileParams.set("lang", lang);
+      }
+      profileLink.href = `/demo?${profileParams.toString()}`;
     }
 
     window.__landingSite = { ...site, unesco_id: uid };
