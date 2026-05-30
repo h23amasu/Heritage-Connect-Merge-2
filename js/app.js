@@ -1324,9 +1324,10 @@ async function translateDistanceLabels(targetLang) {
 async function refreshClosestSiteTextOnly(site, lang) {
   if (!site) return;
 
+  const merged = mergeHeritageSiteTexts(site);
   const target = (lang || getNewspaperLang()).toLowerCase().slice(0, 2);
-  currentSite.name = await resolveSiteName(site, target);
-  const displayDesc = await resolveSiteDescription(site, target);
+  currentSite.name = await resolveSiteName(merged, target);
+  const displayDesc = await resolveSiteDescription(merged, target);
 
   const adName = document.getElementById("adSiteName");
   if (adName) {
@@ -1369,11 +1370,12 @@ async function applyClosestSiteToUi(site) {
 
   applyClosestSiteToUiSync(site);
 
+  const merged = mergeHeritageSiteTexts(site);
   const seq = ++applySiteUiSeq;
-  const siteName = await resolveSiteName(site);
+  const siteName = await resolveSiteName(merged);
   if (isStaleUiApply(seq)) return;
 
-  const displayDesc = await resolveSiteDescription(site, getActiveReaderLang());
+  const displayDesc = await resolveSiteDescription(merged, getActiveReaderLang());
   if (isStaleUiApply(seq)) return;
 
   const siteImageId = site.unesco_id || site.id;
