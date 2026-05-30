@@ -3,14 +3,18 @@ Autentisering – SMS-engångskod och BankID (mock eller riktig RP).
 """
 from __future__ import annotations
 
+import logging
 import random
 import secrets
+import threading
 import time
 from typing import Optional
 
 from app.core.phone_policy import is_blocked_phone
 from app.schemas import NotificationRequest
 from app.services.notification_service import dispatch_notification
+
+logger = logging.getLogger(__name__)
 
 # phone -> {code, expires_at}
 _otp_store: dict[str, dict] = {}
@@ -56,12 +60,28 @@ def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str]]:
         message=message,
         user_id=normalized,
     )
-    dispatch_notification(notification)
+    _dispatch_login_code_async(notification)
     return True, None, code
 
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def _dispatch_login_code_async(notification: NotificationRequest) -> None:
+    """Skicka OTP i bakgrunden så inloggnings-endpointen svarar direkt."""
+
+    def _run() -> None:
+        try:
+            dispatch_notification(notification)
+        except Exception:
+            logger.exception(
+                "Kunde inte skicka inloggningskod till %s – koden finns sparad (demo: %s)",
+                notification.to,
+                DEV_OTP_CODE,
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
@@ -84,7 +104,7 @@ def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
         subject="Heritage Connect – inloggningskod",
         user_id=normalized,
     )
-    dispatch_notification(notification)
+    _dispatch_login_code_async(notification)
     return True, None, code
 
 

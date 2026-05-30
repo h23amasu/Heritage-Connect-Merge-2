@@ -992,6 +992,49 @@ async function readApiError(response, data) {
   return `HTTP ${response.status}`;
 }
 
+async function fetchApiJson(url, options = {}, { timeoutMs = 15000 } = {}) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    window.clearTimeout(timeoutId);
+
+    let data = {};
+    const raw = await response.text();
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        if (!response.ok) {
+          throw new Error(raw.slice(0, 200) || `HTTP ${response.status}`);
+        }
+      }
+    }
+
+    return { response, data };
+  } catch (error) {
+    window.clearTimeout(timeoutId);
+    if (error?.name === "AbortError") {
+      throw new Error("timeout");
+    }
+    throw error;
+  }
+}
+
+function formatApiConnectionError(error) {
+  if (error?.message === "timeout") {
+    return "API:t svarade inte i tid – försök igen om ett ögonblick.";
+  }
+  if (window.location.hostname.includes("railway.app")) {
+    return "Kunde inte nå API – kontrollera att Railway-deployen är aktiv.";
+  }
+  return "Kunde inte nå API – kontrollera att uvicorn körs på port 8000.";
+}
+
 async function probeApiConnection() {
   const response = await fetch(API_ENDPOINTS.root, {
     method: "GET",
@@ -2631,12 +2674,15 @@ async function sendEmailCode() {
   }
 
   try {
-    const response = await fetch(API_ENDPOINTS.loginRequestEmailCode, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
+    const { response, data } = await fetchApiJson(
+      API_ENDPOINTS.loginRequestEmailCode,
+      {
+        method: "POST",
+        headers: apiRequestHeaders(),
+        body: JSON.stringify(payload),
+      },
+      { timeoutMs: 12000 }
+    );
 
     if (!response.ok) {
       toast(`Kunde inte skicka kod: ${await readApiError(response, data)}`);
@@ -2649,10 +2695,13 @@ async function sendEmailCode() {
       otp.focus();
     }
 
-    toast(data.message || "E-postkod skickad. Utvecklingskod: 123456");
+    toast(
+      data.message ||
+        "Inloggningskod skickad. Utvecklingskod: 123456 (mejl kan komma strax efter)."
+    );
   } catch (error) {
     console.warn("request-email-code misslyckades:", error);
-    toast("Kunde inte nå API – kontrollera att uvicorn körs på port 8000.");
+    toast(formatApiConnectionError(error));
   } finally {
     if (sendBtn) {
       sendBtn.disabled = false;
@@ -2680,12 +2729,15 @@ async function loginWithEmailCode() {
   }
 
   try {
-    const response = await fetch(API_ENDPOINTS.loginVerifyEmailCode, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
+    const { response, data } = await fetchApiJson(
+      API_ENDPOINTS.loginVerifyEmailCode,
+      {
+        method: "POST",
+        headers: apiRequestHeaders(),
+        body: JSON.stringify(payload),
+      },
+      { timeoutMs: 10000 }
+    );
 
     if (!response.ok) {
       toast(`Inloggning misslyckades: ${await readApiError(response, data)}`);
@@ -2699,13 +2751,14 @@ async function loginWithEmailCode() {
     prototypeState.access_token = data.access_token || null;
     prototypeState.subscription_active = true;
 
-    updateConfirmationMessage();
+    await updateConfirmationMessage();
     syncSettingsChannelButtons();
     openModalStep("confirmation");
+    startLocationReporting();
     toast("Inloggning genomförd via e-post.");
   } catch (error) {
     console.warn("verify-email-code misslyckades:", error);
-    toast("Kunde inte nå API – kontrollera att uvicorn körs.");
+    toast(formatApiConnectionError(error));
   } finally {
     if (verifyBtn) {
       verifyBtn.disabled = false;
