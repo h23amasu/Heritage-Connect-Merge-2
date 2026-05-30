@@ -84,7 +84,11 @@ class SendGridEmailProvider(EmailProviderInterface):
         if not api_key:
             raise EmailDeliveryError("SENDGRID_API_KEY saknas i .env")
 
-        from_email = settings.SMTP_FROM or settings.SENDGRID_FROM
+        from_email = (settings.SENDGRID_FROM or settings.SMTP_FROM or "").strip()
+        if not from_email or "@" not in from_email:
+            raise EmailDeliveryError(
+                "SENDGRID_FROM saknas i .env – måste vara en verifierad Single Sender i SendGrid"
+            )
         payload = {
             "personalizations": [{"to": [{"email": to}]}],
             "from": {"email": from_email},
@@ -241,7 +245,8 @@ def send_email(to: str, subject: str, message: str) -> dict:
 def email_delivery_configured() -> bool:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
     if provider == "sendgrid":
-        return bool((settings.SENDGRID_API_KEY or "").strip())
+        from_addr = (settings.SENDGRID_FROM or settings.SMTP_FROM or "").strip()
+        return bool((settings.SENDGRID_API_KEY or "").strip() and "@" in from_addr)
     if provider == "resend":
         return bool((settings.RESEND_API_KEY or "").strip())
     if provider == "smtp2go":

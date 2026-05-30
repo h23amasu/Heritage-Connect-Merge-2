@@ -59,7 +59,13 @@ def integration_config():
 
 
 def _masked_from_address() -> str | None:
-    addr = (settings.SMTP2GO_FROM or settings.RESEND_FROM or settings.SMTP_FROM or "").strip()
+    addr = (
+        settings.SENDGRID_FROM
+        or settings.SMTP2GO_FROM
+        or settings.RESEND_FROM
+        or settings.SMTP_FROM
+        or ""
+    ).strip()
     if "@" not in addr:
         return None
     local, domain = addr.split("@", 1)
