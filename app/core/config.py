@@ -65,8 +65,8 @@ class Settings(BaseSettings):
 
     # E-post (notification API channel=email)
     # mock = loggar bara (API svarar success men inget mail i inkorgen)
-    # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP API
-    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid
+    # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP | resend = Resend HTTP (Railway Hobby)
+    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid | resend
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     SMTP_DEFAULT_SUBJECT: str = "Heritage Connect"
     SENDGRID_API_KEY: str = ""
     SENDGRID_FROM: str = ""  # valfritt, annars SMTP_FROM
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = ""  # valfritt, annars SMTP_FROM
 
     # API-nyckel för testmiljö (valfri – frontend skickar Bearer)
     API_BEARER_TOKEN: str = ""

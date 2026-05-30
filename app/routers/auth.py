@@ -1,7 +1,9 @@
 """
 Router: Autentisering – SMS-kod, e-postkod och BankID.
 """
-from fastapi import APIRouter, Query, Request
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.schemas import (
@@ -25,8 +27,20 @@ from app.services.auth_service import (
     verify_sms_code,
 )
 from app.services.bankid_service import bankid_public_config
+from app.services.notification_service import dispatch_notification
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
+logger = logging.getLogger(__name__)
+
+
+def _dispatch_login_code(notification) -> None:
+    try:
+        dispatch_notification(notification)
+    except Exception:
+        logger.exception(
+            "Kunde inte skicka inloggningskod till %s – koden finns sparad lokalt",
+            notification.to,
+        )
 
 
 def _client_ip(request: Request) -> str:
@@ -45,14 +59,16 @@ def bankid_config_endpoint():
 
 
 @router.post("/request-code")
-def request_code(body: AuthRequestCodeRequest):
+def request_code(body: AuthRequestCodeRequest, background_tasks: BackgroundTasks):
     """Skickar engångskod via SMS (gemensamt notification-API)."""
-    ok, err, dev_code = request_sms_code(body.phone)
+    ok, err, dev_code, notification = request_sms_code(body.phone)
     if not ok:
         return JSONResponse(
             status_code=400,
             content={"success": False, "error": err},
         )
+    if notification:
+        background_tasks.add_task(_dispatch_login_code, notification)
     resp = {"success": True, "message": "Kod skickad via SMS"}
     if body.purpose:
         resp["purpose"] = body.purpose
@@ -60,14 +76,19 @@ def request_code(body: AuthRequestCodeRequest):
 
 
 @router.post("/request-email-code")
-def request_email_code_endpoint(body: AuthRequestEmailCodeRequest):
+def request_email_code_endpoint(
+    body: AuthRequestEmailCodeRequest,
+    background_tasks: BackgroundTasks,
+):
     """Skickar engångskod via e-post (för icke-svenska användare)."""
-    ok, err, _dev_code = request_email_code(body.email)
+    ok, err, _dev_code, notification = request_email_code(body.email)
     if not ok:
         return JSONResponse(
             status_code=400,
             content={"success": False, "error": err},
         )
+    if notification:
+        background_tasks.add_task(_dispatch_login_code, notification)
     resp = {"success": True, "message": "Kod skickad via e-post"}
     if body.purpose:
         resp["purpose"] = body.purpose

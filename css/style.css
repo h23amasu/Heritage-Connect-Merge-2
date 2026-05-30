@@ -747,9 +747,7 @@
     }
 
     .image-box {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: relative;
       overflow: hidden;
       width: 100%;
       height: 260px;
@@ -761,9 +759,25 @@
 
     .image-box img,
     .site-detail-img {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    .site-detail-fallback {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: #edf2f7;
+      transition: opacity 180ms ease, visibility 180ms ease;
+    }
+
+    .site-detail-fallback.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .action-stack {
@@ -994,15 +1008,6 @@
       margin: 0 0 10px;
       font-size: 14px;
       letter-spacing: 0.4px;
-    }
-
-    .site-detail-fallback {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      background: #f4faff;
     }
 
     .cancelled-box {

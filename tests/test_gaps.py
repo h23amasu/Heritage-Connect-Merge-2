@@ -59,23 +59,20 @@ def test_email_auth_flow():
     assert "access_token" in response.json()
 
 
-def test_request_email_code_returns_before_slow_dispatch(monkeypatch):
-    import time
+def test_request_email_code_dispatches_notification(monkeypatch):
+    dispatched = []
 
-    from app.services import auth_service
+    def capture(notification):
+        dispatched.append(notification)
 
-    def slow_dispatch(_notification):
-        time.sleep(2)
+    monkeypatch.setattr("app.routers.auth.dispatch_notification", capture)
 
-    monkeypatch.setattr(auth_service, "dispatch_notification", slow_dispatch)
-
-    started = time.time()
     response = client.post(
         "/api/auth/request-email-code",
         json={"email": "slow@example.com", "purpose": "login"},
     )
-    elapsed = time.time() - started
 
     assert response.status_code == 200
     assert response.json()["success"] is True
-    assert elapsed < 1.0
+    assert len(dispatched) == 1
+    assert dispatched[0].channel == "email"

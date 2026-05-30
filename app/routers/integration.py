@@ -4,7 +4,7 @@ Integration endpoints – dela med andra grupper (meddelande-API, SMS-länkar).
 from fastapi import APIRouter
 
 from app.core.config import settings
-from app.services.email_service import email_delivery_configured
+from app.services.email_service import email_delivery_configured, email_provider_name, email_uses_https_api
 from app.services.message_builder import site_detail_url
 
 router = APIRouter(prefix="/api/integration", tags=["Integration"])
@@ -32,6 +32,14 @@ def integration_config():
         "notification_api_legacy_url": f"{notification_base}/notification/send-notification",
         "uses_external_notification_service": bool(settings.NOTIFICATION_SERVICE_URL.strip()),
         "email_delivery_configured": email_delivery_configured(),
+        "email_provider": email_provider_name(),
+        "email_uses_https_api": email_uses_https_api(),
+        "email_railway_smtp_note": (
+            "Railway Hobby/Free blockerar utgående SMTP (port 587). "
+            "Använd EMAIL_PROVIDER=resend eller sendgrid med HTTPS API i produktion."
+            if email_provider_name() == "smtp"
+            else None
+        ),
         "notification_payload_example": {
             "channel": "sms",
             "to": "+46700000001",

@@ -116,11 +116,52 @@ class SendGridEmailProvider(EmailProviderInterface):
         }
 
 
+class ResendEmailProvider(EmailProviderInterface):
+    def send(self, to: str, subject: str, message: str) -> dict:
+        api_key = (settings.RESEND_API_KEY or "").strip()
+        if not api_key:
+            raise EmailDeliveryError("RESEND_API_KEY saknas i .env")
+
+        from_email = settings.RESEND_FROM or settings.SMTP_FROM
+        payload = {
+            "from": from_email,
+            "to": [to],
+            "subject": subject or settings.SMTP_DEFAULT_SUBJECT,
+            "text": message,
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            if response.status_code not in (200, 201):
+                raise EmailDeliveryError(
+                    f"Resend svarade {response.status_code}: {response.text[:300]}"
+                )
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise EmailDeliveryError(f"Resend-nätverksfel: {exc}") from exc
+
+        return {
+            "status": "sent",
+            "message_id": data.get("id") or f"resend_{uuid.uuid4().hex[:12]}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
 def _resolve_provider() -> EmailProviderInterface:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
 
     if provider == "sendgrid":
         return SendGridEmailProvider()
+    if provider == "resend":
+        return ResendEmailProvider()
     if provider == "smtp" and settings.SMTP_HOST:
         return SmtpEmailProvider()
     if provider == "smtp" and not settings.SMTP_HOST:
@@ -136,6 +177,16 @@ def email_delivery_configured() -> bool:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
     if provider == "sendgrid":
         return bool((settings.SENDGRID_API_KEY or "").strip())
+    if provider == "resend":
+        return bool((settings.RESEND_API_KEY or "").strip())
     if provider == "smtp":
         return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
     return False
+
+
+def email_provider_name() -> str:
+    return (settings.EMAIL_PROVIDER or "mock").lower().strip()
+
+
+def email_uses_https_api() -> bool:
+    return email_provider_name() in {"sendgrid", "resend"}
