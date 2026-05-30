@@ -2638,8 +2638,6 @@ async function paymentComplete() {
     return;
   }
 
-  await ensureApiConnection({ silent: true });
-
   const receiptEmail = document.getElementById("paymentReceiptEmail")?.value.trim();
   const submitBtn = document.getElementById("paymentSubmitBtn");
   if (submitBtn) {
@@ -2652,6 +2650,12 @@ async function paymentComplete() {
       if (!stripeClient || !stripeElements || !stripeClientSecret) {
         toast("Stripe laddas – försök igen om ett ögonblick.");
         await prepareStripePaymentStep();
+        return;
+      }
+
+      const { error: submitError } = await stripeElements.submit();
+      if (submitError) {
+        toast(submitError.message || "Betalning misslyckades.");
         return;
       }
 
@@ -2679,6 +2683,7 @@ async function paymentComplete() {
         return;
       }
 
+      await ensureApiConnection({ silent: true });
       await completeSubscriptionAfterPayment({
         amount: SUBSCRIPTION_PRICE_SEK,
         payment_intent_id: paymentIntent.id,
@@ -2686,6 +2691,8 @@ async function paymentComplete() {
       });
       return;
     }
+
+    await ensureApiConnection({ silent: true });
 
     const cardTypeChoice = getSelectedChoice("paymentCardType");
     const cardType = cardTypeChoice?.includes("master") ? "mastercard" : "visa";
