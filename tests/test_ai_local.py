@@ -65,3 +65,20 @@ def test_ai_ask_falun_when_created():
     data = response.json()
     assert data["needs_followup"] is False
     assert "1300" in data["answer"] or "2001" in data["answer"] or "världsarv" in data["answer"].lower()
+    assert "Inscribed as UNESCO" not in data["answer"]
+    assert "Great Copper Mountain" not in data["answer"]
+
+
+def test_ai_ask_falun_swedish_only():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "Var ligger det?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "Sverige" in data["answer"]
+    assert " is located in " not in data["answer"]
