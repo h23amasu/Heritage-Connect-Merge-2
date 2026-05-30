@@ -2207,7 +2207,7 @@ async function reportLocationToApi() {
       console.warn("location/update:", data);
       return;
     }
-    if (data.notified && data.nearest_site?.name) {
+    if data.notified && data.nearest_site?.name) {
       toast(`SMS skickat – du är nära ${data.nearest_site.name}.`);
       if (data.nearest_site.unesco_id || data.nearest_site.id) {
         const siteId = String(data.nearest_site.unesco_id || data.nearest_site.id);
@@ -2215,6 +2215,10 @@ async function reportLocationToApi() {
           prototypeState.visited_sites.push(siteId);
         }
       }
+    } else if (data.reason === "sms_delivery_failed") {
+      toast("SMS kunde inte skickas – kontrollera HelloSMS-inställningarna.");
+    } else if (data.reason === "already_notified") {
+      console.debug("Redan notifierad om denna plats.");
     }
   } catch (error) {
     console.debug("location/update:", error);

@@ -103,7 +103,14 @@ class Settings(BaseSettings):
     def strip_env_quotes(cls, data: Any) -> Any:
         """Railway Raw Editor kan spara värden med citationstecken – rensa dem."""
         if isinstance(data, dict):
-            return {key: _strip_wrapping_quotes(value) for key, value in data.items()}
+            cleaned = {key: _strip_wrapping_quotes(value) for key, value in data.items()}
+            if not cleaned.get("HELLOSMS_API_USERNAME") and cleaned.get("HELLOSMS_USERNAME"):
+                cleaned["HELLOSMS_API_USERNAME"] = cleaned["HELLOSMS_USERNAME"]
+            if not cleaned.get("HELLOSMS_API_PASSWORD") and cleaned.get("HELLOSMS_PASSWORD"):
+                cleaned["HELLOSMS_API_PASSWORD"] = cleaned["HELLOSMS_PASSWORD"]
+            if not cleaned.get("HELLOSMS_SENDER") and cleaned.get("HELLOSMS_FROM"):
+                cleaned["HELLOSMS_SENDER"] = cleaned["HELLOSMS_FROM"]
+            return cleaned
         return data
 
     class Config:

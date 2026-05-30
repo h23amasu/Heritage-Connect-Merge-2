@@ -66,7 +66,22 @@ uvicorn app.main:app --reload --port 8000
 
 | Problem | Lösning |
 |---------|---------|
+| *Expecting value* / *403 Forbidden* | Auto-cert fungerar inte mot BankID längre. Använd `BANKID_PROVIDER=mock` **eller** skaffa RP-cert via [Demo Bank](https://demo.bankid.com) |
 | *Kunde inte nå API* | Kör via `/demo` på port 8000, inte VS Code Live Server |
-| *BankID error: certificate* | Sätt cert eller `BANKID_TEST_SERVER=true` |
-| QR fungerar inte | Använd BankID **test**-app, inte produktions-app |
+| QR fungerar inte | Använd BankID-app i **testläge**, inte produktion |
 | Pending forever | Godkänn i appen; collect pollas var 2:e sekund |
+
+## Test-BankID på telefon (kort guide)
+
+Det finns **ingen separat “test-app”** i App Store. Ni använder vanliga **BankID-appen**, men i testläge + ett **test-BankID** från Demo Bank.
+
+1. **Demo Bank:** [demo.bankid.com](https://demo.bankid.com) – logga in och skapa testperson + utfärda Mobilt BankID.
+2. **Ladda ner BankID-appen** från App Store (iPhone) eller Google Play (Android).
+3. **Ställ appen i testläge:**
+   - **iPhone:** Inställningar → BankID → Utvecklare → ange `cavainternal.test.bankid.com`
+   - **Android:** Öppna BankID → Inställningar → Om BankID → håll in “Felinformation” → skriv `kundtest` → starta om appen
+4. **Aktivera test-BankID** enligt instruktionerna i Demo Bank (QR-kod / aktiveringskod).
+
+**Tips:** Använd gärna en **extra telefon** – samma telefon kan inte ha både riktigt och test-BankID enkelt.
+
+**För kurs/demo utan RP-certifikat:** sätt `BANKID_PROVIDER=mock` – då fungerar knappen direkt utan app.

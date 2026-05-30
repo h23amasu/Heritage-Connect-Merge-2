@@ -213,8 +213,11 @@ def process_location_update(
         result["reason"] = "cooldown"
         return result
 
+    if not dispatch_notification(notification):
+        result["reason"] = "sms_delivery_failed"
+        return result
+
     record_cooldown(notification)
-    dispatch_notification(notification)
 
     visited = UserVisitedSite(user_id=user.id, site_id=site.id)
     db.add(visited)

@@ -49,7 +49,7 @@ def create_demo_subscription(
     _demo_users.setdefault(
         user_key,
         {
-            "phone": body.phone or (body.to if channel == "sms" else ""),
+            "phone": user_key if channel == "sms" else (body.phone or ""),
             "email": (body.email or body.to if channel == "email" else body.email or ""),
             "notification_channel": channel,
             "home_lat": None,
@@ -62,6 +62,8 @@ def create_demo_subscription(
     _demo_users[user_key]["subscription_active"] = True
     _demo_users[user_key]["preferred_language"] = body.language or "sv"
     _demo_users[user_key]["notification_channel"] = channel
+    if channel == "sms":
+        _demo_users[user_key]["phone"] = user_key
 
     _demo_subscriptions[user_key] = {
         "subscription_id": 1,

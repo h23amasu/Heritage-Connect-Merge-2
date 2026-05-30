@@ -79,8 +79,8 @@ def _parse_site_id(site_id: Optional[str]) -> Optional[int]:
     return None
 
 
-def dispatch_notification(request: NotificationRequest) -> None:
-    """Background task – actually sends SMS or email."""
+def dispatch_notification(request: NotificationRequest) -> bool:
+    """Skickar SMS/e-post. Returnerar True om leveransen lyckades."""
     try:
         if request.type == "sms":
             sms_request = SMSRequest(
@@ -88,10 +88,18 @@ def dispatch_notification(request: NotificationRequest) -> None:
                 message=request.message[:160],
                 site_id=_parse_site_id(request.site_id),
             )
-            send_sms(sms_request)
-        else:
-            subject = request.subject or "Meddelande"
-            send_email(request.to, subject, request.message)
+            result = send_sms(sms_request)
+            if result.status != "sent":
+                logger.error(
+                    "SMS delivery failed to=%s site_id=%s",
+                    request.to,
+                    request.site_id,
+                )
+                return False
+            return True
+        subject = request.subject or "Meddelande"
+        send_email(request.to, subject, request.message)
+        return True
     except EmailDeliveryError:
         logger.exception(
             "E-postleverans misslyckades till %s (kontrollera .env: EMAIL_PROVIDER, SMTP/SendGrid)",

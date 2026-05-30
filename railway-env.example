@@ -9,9 +9,9 @@ DATABASE_URL=sqlite:///./heritage_connect.db
 
 # SMS – HelloSMS (riktiga SMS)
 SMS_PROVIDER=hellosms
-HELLOSMS_API_USERNAME=ert_användarnamn
-HELLOSMS_API_PASSWORD=ert_lösenord
-HELLOSMS_SENDER=Heritage C
+HELLOSMS_API_USERNAME=ert_api_användarnamn
+HELLOSMS_API_PASSWORD=ert_api_lösenord
+HELLOSMS_SENDER=46764911139
 HELLOSMS_TEST_MODE=false
 
 # E-post – Gmail SMTP (riktig e-post)

@@ -96,15 +96,34 @@ def mock_start() -> dict:
     }
 
 
+def _format_bankid_error(exc: Exception) -> str:
+    message = str(exc)
+    if "Expecting value" in message or "JSONDecodeError" in type(exc).__name__:
+        return (
+            "BankID-servern avvisade anslutningen. Auto-genererat testcert räcker inte – "
+            "ni behöver RP-certifikat från BankID Demo Bank, eller sätt BANKID_PROVIDER=mock för demo."
+        )
+    if "403" in message or "Forbidden" in message:
+        return (
+            "BankID avvisade certifikatet (403). Skaffa testcert via BankID Demo Bank "
+            "(demo.bankid.com), eller kör BANKID_PROVIDER=mock tills dess."
+        )
+    return f"BankID error: {exc}"
+
+
 def start_auth(end_user_ip: str) -> dict:
     if not bankid_configured():
         return mock_start()
 
-    client = _get_client()
-    response = client.authenticate(
-        end_user_ip=end_user_ip,
-        user_visible_data="Logga in på Heritage Connect",
-    )
+    try:
+        client = _get_client()
+        response = client.authenticate(
+            end_user_ip=end_user_ip,
+            user_visible_data="Logga in på Heritage Connect",
+        )
+    except Exception as exc:
+        raise RuntimeError(_format_bankid_error(exc)) from exc
+
     order_ref = response["orderRef"]
     _order_meta[order_ref] = {
         "qr_start_token": response.get("qrStartToken"),

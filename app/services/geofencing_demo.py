@@ -129,8 +129,11 @@ def process_location_demo(
         result["reason"] = "cooldown"
         return result
 
+    if not dispatch_notification(notification):
+        result["reason"] = "sms_delivery_failed"
+        return result
+
     record_cooldown(notification)
-    dispatch_notification(notification)
     _demo_notified.add(notify_key)
 
     result["notified"] = True
