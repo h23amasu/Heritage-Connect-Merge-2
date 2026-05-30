@@ -7,6 +7,7 @@ const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 /** Tidigare standard-ngrok – migreras till localhost vid laddning */
 const LEGACY_DEFAULT_API_BASE_URL = "https://fling-sneer-margarita.ngrok-free.dev";
 const API_BASE_STORAGE_KEY = "heritage_connect_api_base_url";
+const DEMO_POSITION_STORAGE_KEY = "heritage_connect_demo_position";
 const API_TOKEN = "hemlig-nyckel";
 
 /** Standard vid sidladdning: `<html lang="…">` i index.html (ISO 639-1, t.ex. sv, ja, hi). */
@@ -1381,22 +1382,58 @@ function syncDemoPositionSelect(lat, lng) {
   if (selectDemo) selectDemo.value = matched;
 }
 
+function loadPersistedDemoPosition() {
+  try {
+    return sessionStorage.getItem(DEMO_POSITION_STORAGE_KEY) || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function persistDemoPosition(value) {
+  try {
+    if (value) {
+      sessionStorage.setItem(DEMO_POSITION_STORAGE_KEY, value);
+    } else {
+      sessionStorage.removeItem(DEMO_POSITION_STORAGE_KEY);
+    }
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function restoreDemoPositionSelects(value = loadPersistedDemoPosition()) {
+  const select = document.getElementById("testPositionSelect");
+  const selectDemo = document.getElementById("testPositionSelectDemo");
+  if (select) select.value = value || "";
+  if (selectDemo) selectDemo.value = value || "";
+}
+
 function applyTestPosition(value) {
   const select = document.getElementById("testPositionSelect");
   const selectDemo = document.getElementById("testPositionSelectDemo");
   if (select) select.value = value || "";
   if (selectDemo) selectDemo.value = value || "";
+  persistDemoPosition(value || "");
 
   if (!value) {
     stopGeoWatch();
     startGeoWatch();
+    renderClosestSiteNow();
+    void refreshGeoFromApi();
     return;
   }
+
   stopGeoWatch();
   const [lat, lng] = value.split(",").map(Number);
-  lastClosestSite = null;
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    console.warn("Ogiltig demo-plats:", value);
+    return;
+  }
+
   setGeoCoords(lat, lng, "test");
-  refreshGeoFromApi();
+  renderClosestSiteNow();
+  void refreshGeoFromApi();
   void reportLocationToApi();
 }
 
@@ -1499,9 +1536,14 @@ function onGeoError(err) {
  */
 function startGeoWatch() {
   stopGeoWatch();
-  setGeoCoords(DEFAULT_GEO.latitude, DEFAULT_GEO.longitude, "default");
+  if (geoState.source !== "test" && geoState.source !== "url") {
+    setGeoCoords(DEFAULT_GEO.latitude, DEFAULT_GEO.longitude, "default");
+  }
 
   if (!navigator.geolocation) {
+    if (geoState.source !== "test" && geoState.source !== "url") {
+      void refreshGeoFromApi();
+    }
     return;
   }
 
@@ -1519,6 +1561,9 @@ function startGeoWatch() {
 }
 
 function initGeoPrototype() {
+  if (geoState.source === "test" || geoState.source === "url") {
+    return;
+  }
   startGeoWatch();
 }
 
@@ -1831,6 +1876,7 @@ function initDemoLanguageSelect() {
 function initGeoDemoControls() {
   const demoSelect = document.getElementById("testPositionSelectDemo");
   const topSelect = document.getElementById("testPositionSelect");
+  restoreDemoPositionSelects();
 
   demoSelect?.addEventListener("change", event => {
     applyTestPosition(event.target.value);
@@ -2194,6 +2240,7 @@ async function reportLocationToApi() {
     phoneNo: phone,
     latitude: geoState.latitude,
     longitude: geoState.longitude,
+    simulate_travel: geoState.source === "test",
   };
 
   try {
@@ -2207,7 +2254,7 @@ async function reportLocationToApi() {
       console.warn("location/update:", data);
       return;
     }
-    if data.notified && data.nearest_site?.name) {
+    if (data.notified && data.nearest_site?.name) {
       toast(`SMS skickat – du är nära ${data.nearest_site.name}.`);
       if (data.nearest_site.unesco_id || data.nearest_site.id) {
         const siteId = String(data.nearest_site.unesco_id || data.nearest_site.id);
@@ -2217,8 +2264,21 @@ async function reportLocationToApi() {
       }
     } else if (data.reason === "sms_delivery_failed") {
       toast("SMS kunde inte skickas – kontrollera HelloSMS-inställningarna.");
+    } else if (data.reason === "cooldown") {
+      console.debug("Geofencing-SMS väntar på cooldown – försöker igen om 65 sekunder.");
+      window.setTimeout(() => {
+        if (prototypeState.subscription_active) {
+          void reportLocationToApi();
+        }
+      }, 65000);
+    } else if (data.reason === "in_commute_zone") {
+      toast("Du är i hemzonen – byt demo-plats till t.ex. Falun för att testa världsarv-SMS.");
+    } else if (data.reason === "home_registered") {
+      console.debug("Hemposition registrerad.");
     } else if (data.reason === "already_notified") {
       console.debug("Redan notifierad om denna plats.");
+    } else if (data.reason === "no_nearby_site") {
+      console.debug("Inget världsarv inom 30 km.");
     }
   } catch (error) {
     console.debug("location/update:", error);
@@ -2594,7 +2654,6 @@ function sendConfirmationNotificationPayload() {
     message: "Din Heritage Connect-prenumeration är nu aktiv. Du får nu notiser om världsarv nära dig.",
     subject: "Din Heritage Connect-prenumeration är aktiv",
     user_id: prototypeState.user_id,
-    site_id: currentSite.site_id
   };
 
   logApiPayload(
@@ -2658,8 +2717,8 @@ async function completeSubscriptionAfterPayment(paymentFields) {
   openModalStep("confirmation");
   toast("Betalning genomförd. Prenumerationen är aktiv.");
 
-  sendConfirmationNotificationPayload();
   startLocationReporting();
+  sendConfirmationNotificationPayload();
   return true;
 }
 
@@ -3307,7 +3366,12 @@ async function bootstrapApp() {
     setGeoCoords(urlPos.latitude, urlPos.longitude, "url");
     syncDemoPositionSelect(urlPos.latitude, urlPos.longitude);
   } else {
-    initGeoPrototype();
+    const persistedDemoPosition = loadPersistedDemoPosition();
+    if (persistedDemoPosition) {
+      applyTestPosition(persistedDemoPosition);
+    } else {
+      initGeoPrototype();
+    }
   }
 
   renderClosestSiteNow();

@@ -52,6 +52,7 @@ def update_location(
             body.longitude,
             home_radius_km=settings.DEFAULT_HOME_RADIUS_KM,
             site_radius_km=settings.SITE_NOTIFY_RADIUS_KM,
+            simulate_travel=body.simulate_travel,
         )
         return LocationUpdateResponse(**result)
 

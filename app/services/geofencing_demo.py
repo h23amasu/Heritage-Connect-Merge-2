@@ -11,14 +11,31 @@ from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site
 from app.services.message_builder import build_near_site_sms
 from app.services.notification_service import (
-    check_cooldown,
     dispatch_notification,
-    record_cooldown,
 )
+from app.services.cooldown_service import cooldown_service
 from app.schemas import NotificationRequest
 
 _demo_users: dict[str, dict[str, Any]] = {}
 _demo_notified: set[tuple[str, str]] = set()
+
+
+def _geo_cooldown_active(request: NotificationRequest) -> bool:
+    return cooldown_service.is_on_cooldown(
+        "geo",
+        request.to,
+        request.user_id,
+        request.site_id,
+    )
+
+
+def _record_geo_cooldown(request: NotificationRequest) -> None:
+    cooldown_service.record_send(
+        "geo",
+        request.to,
+        request.user_id,
+        request.site_id,
+    )
 
 
 def mark_demo_site_notified(user_key: str, site_id: str) -> None:
@@ -56,13 +73,10 @@ def process_location_demo(
     *,
     home_radius_km: float = 0.1,
     site_radius_km: float = 30.0,
+    simulate_travel: bool = False,
 ) -> dict[str, Any]:
     user_key = _demo_user_key(phone_number)
     user = _ensure_demo_user(phone_number)
-
-    if user["home_lat"] is None:
-        user["home_lat"] = latitude - 0.02
-        user["home_lng"] = longitude
 
     result: dict[str, Any] = {
         "success": True,
@@ -88,13 +102,22 @@ def process_location_demo(
         result["reason"] = "notification_channel_not_sms"
         return result
 
-    dist_home = haversine_km(
-        latitude, longitude, user["home_lat"], user["home_lng"]
-    )
-    if dist_home <= home_radius_km:
-        result["in_commute_zone"] = True
-        result["reason"] = "in_commute_zone"
-        return result
+    home_was_unset = user["home_lat"] is None
+    if home_was_unset:
+        user["home_lat"] = latitude
+        user["home_lng"] = longitude
+        if not simulate_travel:
+            result["reason"] = "home_registered"
+            return result
+
+    if not simulate_travel:
+        dist_home = haversine_km(
+            latitude, longitude, user["home_lat"], user["home_lng"]
+        )
+        if dist_home <= home_radius_km:
+            result["in_commute_zone"] = True
+            result["reason"] = "in_commute_zone"
+            return result
 
     nearest, nearest_dist_km = find_closest_site(latitude, longitude)
     if not nearest or nearest_dist_km > site_radius_km:
@@ -125,7 +148,7 @@ def process_location_demo(
         site_id=unesco_id,
     )
 
-    if check_cooldown(notification):
+    if _geo_cooldown_active(notification):
         result["reason"] = "cooldown"
         return result
 
@@ -133,7 +156,7 @@ def process_location_demo(
         result["reason"] = "sms_delivery_failed"
         return result
 
-    record_cooldown(notification)
+    _record_geo_cooldown(notification)
     _demo_notified.add(notify_key)
 
     result["notified"] = True

@@ -140,6 +140,7 @@ class LocationUpdateRequest(BaseModel):
     longitude: float = Field(..., ge=-180, le=180)
     phoneNo: str = Field(..., min_length=8, max_length=20)
     timestamp: Optional[datetime] = None
+    simulate_travel: bool = False
 
     model_config = {"populate_by_name": True}
 
