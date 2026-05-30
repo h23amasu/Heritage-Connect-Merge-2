@@ -2,9 +2,16 @@
 Integration endpoints – dela med andra grupper (meddelande-API, SMS-länkar).
 """
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.services.email_service import email_delivery_configured, email_provider_name, email_uses_https_api
+from app.services.email_service import (
+    EmailDeliveryError,
+    email_delivery_configured,
+    email_provider_name,
+    email_uses_https_api,
+    send_email,
+)
 from app.services.message_builder import site_detail_url
 
 router = APIRouter(prefix="/api/integration", tags=["Integration"])
@@ -49,3 +56,57 @@ def integration_config():
         },
         "notification_error_codes": ["invalid_type", "invalid_recipient", "cooldown"],
     }
+
+
+def _masked_from_address() -> str | None:
+    addr = (settings.SMTP2GO_FROM or settings.RESEND_FROM or settings.SMTP_FROM or "").strip()
+    if "@" not in addr:
+        return None
+    local, domain = addr.split("@", 1)
+    if len(local) <= 2:
+        masked_local = "*"
+    else:
+        masked_local = f"{local[:2]}***"
+    return f"{masked_local}@{domain}"
+
+
+@router.get("/email-health")
+def email_health():
+    """Hjälper felsöka e-post utan att exponera hemligheter."""
+    from_set = _masked_from_address()
+    return {
+        "success": True,
+        "email_provider": email_provider_name(),
+        "email_delivery_configured": email_delivery_configured(),
+        "email_from_configured": bool(from_set),
+        "email_from_hint": from_set,
+        "email_uses_https_api": email_uses_https_api(),
+    }
+
+
+@router.post("/email-test")
+def email_test(body: dict):
+    """
+    Skickar ett testmail synkront och returnerar verkligt fel från leverantören.
+    Body: {"to": "mottagare@example.com"}
+    """
+    to = (body.get("to") or "").strip()
+    if not to or "@" not in to:
+        return JSONResponse(status_code=400, content={"success": False, "error": "invalid_recipient"})
+    if not email_delivery_configured():
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "error": "email_not_configured"},
+        )
+    try:
+        result = send_email(
+            to,
+            "Heritage Connect – test",
+            "Det här är ett testmail från Heritage Connect. Om du ser detta fungerar e-post.",
+        )
+        return {"success": True, "provider": email_provider_name(), "result": result}
+    except EmailDeliveryError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"success": False, "error": "email_delivery_failed", "message": str(exc)},
+        )

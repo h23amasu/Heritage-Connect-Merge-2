@@ -64,6 +64,7 @@ def test_request_email_code_dispatches_notification(monkeypatch):
 
     def capture(notification):
         dispatched.append(notification)
+        return True
 
     monkeypatch.setattr("app.routers.auth.dispatch_notification", capture)
 

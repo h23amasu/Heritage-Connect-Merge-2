@@ -161,12 +161,23 @@ class Smtp2GoEmailProvider(EmailProviderInterface):
         if not api_key:
             raise EmailDeliveryError("SMTP2GO_API_KEY saknas i .env")
 
-        from_email = settings.SMTP2GO_FROM or settings.SMTP_FROM
+        from_email = (settings.SMTP2GO_FROM or settings.SMTP_FROM or "").strip()
+        if not from_email or "@" not in from_email:
+            raise EmailDeliveryError(
+                "SMTP2GO_FROM saknas i .env – måste vara en verifierad Single sender i SMTP2GO"
+            )
+
+        sender = (
+            from_email
+            if "<" in from_email and ">" in from_email
+            else f"Heritage Connect <{from_email}>"
+        )
         payload = {
-            "sender": from_email,
+            "sender": sender,
             "to": [to],
             "subject": subject or settings.SMTP_DEFAULT_SUBJECT,
             "text_body": message,
+            "fastaccept": True,
         }
 
         try:
@@ -179,12 +190,18 @@ class Smtp2GoEmailProvider(EmailProviderInterface):
                 json=payload,
                 timeout=30.0,
             )
-            if response.status_code != 200:
-                raise EmailDeliveryError(
-                    f"SMTP2GO svarade {response.status_code}: {response.text[:300]}"
-                )
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
             email_data = data.get("data") or {}
+            api_error = email_data.get("error")
+            if response.status_code != 200 or api_error:
+                detail = api_error or response.text[:300]
+                raise EmailDeliveryError(
+                    f"SMTP2GO svarade {response.status_code}: {detail}"
+                )
             if email_data.get("failed"):
                 raise EmailDeliveryError(
                     f"SMTP2GO kunde inte skicka: {email_data.get('failures') or data}"
@@ -193,6 +210,7 @@ class Smtp2GoEmailProvider(EmailProviderInterface):
             raise EmailDeliveryError(f"SMTP2GO-nätverksfel: {exc}") from exc
 
         message_id = email_data.get("email_id") or data.get("request_id") or f"smtp2go_{uuid.uuid4().hex[:12]}"
+        logger.info("SMTP2GO mail skickat till %s (id=%s)", to, message_id)
         return {
             "status": "sent",
             "message_id": message_id,
@@ -227,7 +245,8 @@ def email_delivery_configured() -> bool:
     if provider == "resend":
         return bool((settings.RESEND_API_KEY or "").strip())
     if provider == "smtp2go":
-        return bool((settings.SMTP2GO_API_KEY or "").strip())
+        from_addr = (settings.SMTP2GO_FROM or settings.SMTP_FROM or "").strip()
+        return bool((settings.SMTP2GO_API_KEY or "").strip() and "@" in from_addr)
     if provider == "smtp":
         return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
     return False

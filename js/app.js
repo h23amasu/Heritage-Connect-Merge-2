@@ -2691,7 +2691,8 @@ async function sendEmailCode() {
     );
 
     if (!response.ok) {
-      toast(`Kunde inte skicka kod: ${await readApiError(response, data)}`);
+      const detail = data?.message || (await readApiError(response, data));
+      toast(`Kunde inte skicka kod: ${detail}`);
       return;
     }
 

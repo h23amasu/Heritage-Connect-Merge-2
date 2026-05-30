@@ -27,6 +27,7 @@ from app.services.auth_service import (
     verify_sms_code,
 )
 from app.services.bankid_service import bankid_public_config
+from app.services.email_service import EmailDeliveryError
 from app.services.notification_service import dispatch_notification
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -76,10 +77,7 @@ def request_code(body: AuthRequestCodeRequest, background_tasks: BackgroundTasks
 
 
 @router.post("/request-email-code")
-def request_email_code_endpoint(
-    body: AuthRequestEmailCodeRequest,
-    background_tasks: BackgroundTasks,
-):
+def request_email_code_endpoint(body: AuthRequestEmailCodeRequest):
     """Skickar engångskod via e-post (för icke-svenska användare)."""
     ok, err, _dev_code, notification = request_email_code(body.email)
     if not ok:
@@ -88,7 +86,36 @@ def request_email_code_endpoint(
             content={"success": False, "error": err},
         )
     if notification:
-        background_tasks.add_task(_dispatch_login_code, notification)
+        try:
+            if not dispatch_notification(notification):
+                return JSONResponse(
+                    status_code=502,
+                    content={
+                        "success": False,
+                        "error": "email_delivery_failed",
+                        "message": "E-postleverantören kunde inte skicka mailet.",
+                    },
+                )
+        except EmailDeliveryError as exc:
+            logger.warning("E-postkod misslyckades till %s: %s", body.email, exc)
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "success": False,
+                    "error": "email_delivery_failed",
+                    "message": str(exc),
+                },
+            )
+        except Exception:
+            logger.exception("Oväntat fel vid e-postkod till %s", body.email)
+            return JSONResponse(
+                status_code=502,
+                content={
+                    "success": False,
+                    "error": "email_delivery_failed",
+                    "message": "Kunde inte skicka e-post just nu.",
+                },
+            )
     resp = {"success": True, "message": "Kod skickad via e-post"}
     if body.purpose:
         resp["purpose"] = body.purpose
