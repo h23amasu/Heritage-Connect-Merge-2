@@ -1,19 +1,19 @@
-# Testar POST /notification/send-notification med type=email
+# Testar POST /api/notification/send med channel=email
 param(
     [string]$BaseUrl = "http://127.0.0.1:8000",
     [string]$To = "mojgan.ghaffari@gmail.com"
 )
 
 $body = @{
-    type    = "email"
+    channel = "email"
     to      = $To
     message = "Heritage Connect e-posttest $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
     subject = "Heritage Connect test"
 } | ConvertTo-Json -Compress
 
-Write-Host "POST $BaseUrl/notification/send-notification -> $To"
+Write-Host "POST $BaseUrl/api/notification/send -> $To"
 try {
-    $r = Invoke-WebRequest -Uri "$BaseUrl/notification/send-notification" `
+    $r = Invoke-WebRequest -Uri "$BaseUrl/api/notification/send" `
         -Method POST -Body $body -ContentType "application/json; charset=utf-8" -UseBasicParsing
     Write-Host "HTTP $($r.StatusCode)" -ForegroundColor Green
     Write-Host $r.Content

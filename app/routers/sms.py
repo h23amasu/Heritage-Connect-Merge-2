@@ -1,7 +1,7 @@
 """
 Router: SMS (legacy)
 
-Prefer POST /notification/send-notification with type=sms for cross-group compatibility.
+Prefer POST /api/notification/send with channel=sms for cross-group compatibility.
 """
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
@@ -27,10 +27,10 @@ def send_sms_endpoint(
     db: Session = Depends(get_db),
 ):
     """
-    Legacy SMS-endpoint. Samma svar som POST /notification/send-notification (utan leverantör).
+    Legacy SMS-endpoint. Samma svar som POST /api/notification/send (utan leverantör).
     """
     notification = NotificationRequest(
-        type="sms",
+        channel="sms",
         to=request.phone_number,
         message=request.message,
         site_id=str(request.site_id) if request.site_id else None,

@@ -496,7 +496,7 @@ function buildApiEndpoints(baseUrl) {
 
   return {
     root: `${base}/`,
-    notificationSend: `${base}/notification/send-notification`,
+    notificationSend: `${base}/api/notification/send`,
     createSubscription: `${base}/api/subscription/create`,
     loginRequestCode: `${base}/api/auth/request-code`,
     loginVerifyCode: `${base}/api/auth/verify-code`,
@@ -2690,7 +2690,7 @@ async function updateConfirmationMessage(extra) {
 
 function sendConfirmationNotificationPayload() {
   const confirmationPayload = {
-    type: prototypeState.channel,
+    channel: prototypeState.channel,
     to: getRecipientValue(),
     message: "Din Heritage Connect-prenumeration är nu aktiv. Du får nu notiser om världsarv nära dig.",
     subject: "Din Heritage Connect-prenumeration är aktiv",
@@ -2874,7 +2874,7 @@ function previewNotificationPayload() {
     : prototypeState.phone;
 
   const notificationPayload = {
-    type: prototypeState.channel,
+    channel: prototypeState.channel,
     to: toValue,
     message: `Du är nära ${currentSite.name}. Läs mer via din personliga länk.`,
     subject: "Världsarv nära dig",

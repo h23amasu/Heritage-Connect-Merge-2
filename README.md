@@ -84,7 +84,7 @@ Sätt `GEOFENCING_DEMO_MODE=false` i `.env` om du vill köra mot PostgreSQL.
 
 | Tjänst | Endpoint |
 |--------|----------|
-| **Meddelanden (gemensamt)** | `POST /notification/send-notification` |
+| **Meddelanden (gemensamt)** | `POST /api/notification/send` |
 | **Översättning** | `POST /api/translate`, `POST /api/translate/batch` |
 | **UNESCO** | `GET /api/unesco/sites`, `POST /api/unesco/sync` |
 | **Närmaste världsarv (backend)** | `GET /api/sites/closest?lat=&lng=` |
@@ -104,7 +104,7 @@ Request:
 
 ```json
 {
-  "type": "sms",
+  "channel": "sms",
   "to": "+46738100354",
   "message": "Hej!",
   "subject": "valfritt för e-post",
@@ -127,7 +127,7 @@ Välj **demo-plats** (Falun, Stockholm, m.fl.) i tidningen eller tillåt GPS.
 
 1. Exponera API (ngrok, Azure, skolserver): `ngrok http 8000`
 2. Dela bas-URL + exempel i `docs/API.md`
-3. Byt leverantör genom att peka klienter mot annan grupps `POST /notification/send-notification` – samma JSON-format
+3. Byt leverantör genom att peka klienter mot annan grupps `POST /api/notification/send` – samma JSON-format
 
 ## Tester
 

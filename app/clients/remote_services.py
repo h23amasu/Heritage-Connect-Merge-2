@@ -60,12 +60,12 @@ def send_notification(request: NotificationRequest) -> dict[str, Any]:
             return {"success": False, "error": ERROR_COOLDOWN}
         record_cooldown(request)
         dispatch_notification(request)
-        return {"success": True, "channel": request.type}
+        return {"success": True, "channel": request.channel}
 
     payload = request.model_dump(mode="json")
     try:
         with httpx.Client(timeout=30.0) as client:
-            response = client.post(f"{base}/notification/send-notification", json=payload)
+            response = client.post(f"{base}/api/notification/send", json=payload)
             if response.content:
                 return response.json()
             return {"success": response.is_success}

@@ -66,7 +66,7 @@ def test_dispatch_notification_calls_send_sms(mock_hellosms):
     with patch("app.services.notification_service.send_sms") as mock_sms:
         dispatch_notification(
             NotificationRequest(
-                type="sms",
+                channel="sms",
                 to="+46738100354",
                 message="Test",
             )

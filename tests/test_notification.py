@@ -7,6 +7,8 @@ from app.main import app
 from app.services.cooldown_service import cooldown_service
 
 client = TestClient(app)
+NOTIFY_URL = "/api/notification/send"
+LEGACY_URL = "/notification/send-notification"
 
 
 def setup_function():
@@ -15,9 +17,9 @@ def setup_function():
 
 def test_notification_sms_success():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "sms",
+            "channel": "sms",
             "to": "+46738100354",
             "message": "Hej!",
             "user_id": "u1",
@@ -31,9 +33,9 @@ def test_notification_sms_success():
 
 def test_notification_email_success():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "email",
+            "channel": "email",
             "to": "test@example.com",
             "message": "Hej!",
             "subject": "Ämne",
@@ -45,9 +47,9 @@ def test_notification_email_success():
 
 def test_notification_invalid_type():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "SMS",
+            "channel": "SMS",
             "to": "+46738100354",
             "message": "Hej!",
         },
@@ -58,9 +60,9 @@ def test_notification_invalid_type():
 
 def test_notification_blocked_phone():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "sms",
+            "channel": "sms",
             "to": "0700000000",
             "message": "Hej!",
         },
@@ -71,9 +73,9 @@ def test_notification_blocked_phone():
 
 def test_notification_blocks_documentation_example_phone():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "sms",
+            "channel": "sms",
             "to": "+46701234567",
             "message": "Hej!",
         },
@@ -84,9 +86,9 @@ def test_notification_blocks_documentation_example_phone():
 
 def test_notification_invalid_recipient_phone():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "sms",
+            "channel": "sms",
             "to": "0738100354",
             "message": "Hej!",
         },
@@ -97,9 +99,9 @@ def test_notification_invalid_recipient_phone():
 
 def test_notification_invalid_recipient_email():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "email",
+            "channel": "email",
             "to": "not-an-email",
             "message": "Hej!",
         },
@@ -110,23 +112,23 @@ def test_notification_invalid_recipient_email():
 
 def test_notification_cooldown():
     payload = {
-        "type": "sms",
+        "channel": "sms",
         "to": "+46738100354",
         "message": "Hej!",
         "user_id": "u1",
         "site_id": "site_1",
     }
-    assert client.post("/notification/send-notification", json=payload).status_code == 200
-    response = client.post("/notification/send-notification", json=payload)
+    assert client.post(NOTIFY_URL, json=payload).status_code == 200
+    response = client.post(NOTIFY_URL, json=payload)
     assert response.status_code == 429
     assert response.json() == {"success": False, "error": "cooldown"}
 
 
 def test_notification_no_provider_in_response():
     response = client.post(
-        "/notification/send-notification",
+        NOTIFY_URL,
         json={
-            "type": "sms",
+            "channel": "sms",
             "to": "+46738100354",
             "message": "Test",
         },
@@ -135,6 +137,19 @@ def test_notification_no_provider_in_response():
     assert "provider" not in body
     assert "twilio" not in str(body).lower()
     assert "hellosms" not in str(body).lower()
+
+
+def test_legacy_endpoint_accepts_type_field():
+    response = client.post(
+        LEGACY_URL,
+        json={
+            "type": "sms",
+            "to": "+46738100354",
+            "message": "Legacy",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "channel": "sms"}
 
 
 def test_legacy_sms_send_no_provider_in_response():

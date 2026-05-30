@@ -43,13 +43,13 @@ Hälsokontroll för lastbalansering och Docker.
 
 ## 2. Meddelandetjänst (gemensam kursstandard)
 
-### `POST /notification/send-notification`
-Skickar SMS eller e-post.
+### `POST /api/notification/send`
+Skickar SMS eller e-post (gemensam kursstandard).
 
 **Body:**
 ```json
 {
-  "type": "sms",
+  "channel": "sms",
   "to": "+46701234567",
   "message": "Du är nära Gruvorna i Falun. Se mer via din länk.",
   "subject": "Världsarv nära dig",
@@ -60,7 +60,7 @@ Skickar SMS eller e-post.
 
 | Fält | Typ | Krav | Beskrivning |
 |------|-----|------|-------------|
-| type | `"sms"` eller `"email"` | Ja | Meddelandekanal |
+| channel | `"sms"` eller `"email"` | Ja | Meddelandekanal |
 | to | sträng | Ja | Telefon `+46...` eller e-postadress |
 | message | sträng (max 2000) | Ja | Meddelandetext |
 | subject | sträng | Nej | Ämnesrad för e-post |
@@ -76,10 +76,12 @@ Skickar SMS eller e-post.
 
 | HTTP | error | Betydelse |
 |------|-------|-----------|
-| 400 | `invalid_type` | Ogiltigt type-värde |
+| 400 | `invalid_type` | Ogiltigt channel-värde |
 | 400 | `invalid_recipient` | Ogiltigt telefonnummer eller e-post |
 | 429 | `cooldown` | För täta meddelanden till samma mottagare |
 | 500 | `send_failed` | Leverantörsfel |
+
+**Legacy:** `POST /notification/send-notification` accepterar fältet `type` (mappas till `channel`).
 
 ---
 
@@ -455,7 +457,7 @@ Uppdaterar inställningar.
 | Tjänst | Port | Docker-IP | Entrypoint | Endpoints |
 |--------|------|-----------|------------|-----------|
 | core | 8000 | 172.28.0.20 | `app/main.py` | Alla endpoints (monolit) |
-| notification | 8001 | 172.28.0.10 | `app/main_notification.py` | `/notification/send-notification`, `/api/sms/...` |
+| notification | 8001 | 172.28.0.10 | `app/main_notification.py` | `/api/notification/send`, `/api/sms/...` |
 | translate | 8002 | 172.28.0.11 | `app/main_translate.py` | `/api/translate`, `/api/translate/batch` |
 | geo | 8003 | 172.28.0.12 | `app/main_geo.py` | `/api/location/...`, `/api/sites/...`, `/api/unesco/...` |
 | ai | 8004 | 172.28.0.13 | `app/main_ai.py` | `/api/ai/...` |

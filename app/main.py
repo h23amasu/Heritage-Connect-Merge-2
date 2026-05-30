@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
     if not email_delivery_configured():
         print(
-            "[WARN] E-post: MOCK-läge – POST /notification/send-notification med type=email "
+            "[WARN] E-post: MOCK-läge – POST /api/notification/send med channel=email "
             "ger success men skickar inget riktigt mail. Sätt EMAIL_PROVIDER=smtp i .env "
             "(se docs/EMAIL.md)."
         )
@@ -98,6 +98,7 @@ app.include_router(users.router)
 app.include_router(subscriptions.router)
 app.include_router(payments.router)
 app.include_router(notification.router)
+app.include_router(notification.legacy_router)
 app.include_router(location.router)
 app.include_router(sms.router)
 app.include_router(ai.router)

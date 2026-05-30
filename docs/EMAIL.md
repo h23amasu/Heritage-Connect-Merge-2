@@ -43,7 +43,7 @@ SENDGRID_FROM=din-verifierade-avsandare@domän.se
 
 ```powershell
 $body = '{"channel":"email","to":"mottagare@example.com","message":"Hej!","subject":"Heritage Connect test"}'
-Invoke-WebRequest -Uri "https://ER-NGROK.ngrok-free.dev/notification/send-notification" `
+Invoke-WebRequest -Uri "https://ER-NGROK.ngrok-free.dev/api/notification/send" `
   -Method POST -Body $body -ContentType "application/json" `
   -Headers @{"ngrok-skip-browser-warning"="1"}
 ```

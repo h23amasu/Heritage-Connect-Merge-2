@@ -117,7 +117,7 @@ def send_expiry_reminders(
             f"få notiser om världsarv nära dig."
         )
         result = send_notification(NotificationRequest(
-            type="sms",
+            channel="sms",
             to=user.phone_number,
             message=message,
             user_id=str(user.id),

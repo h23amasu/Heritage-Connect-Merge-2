@@ -11,4 +11,5 @@ app = create_microservice_app(
 )
 
 app.include_router(notification.router)
+app.include_router(notification.legacy_router)
 app.include_router(sms.router)

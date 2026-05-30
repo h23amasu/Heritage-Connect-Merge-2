@@ -152,7 +152,7 @@ def process_location_demo(
         return result
 
     notification = NotificationRequest(
-        type="sms",
+        channel="sms",
         to=user_key,
         message=build_near_site_sms(
             site_name,

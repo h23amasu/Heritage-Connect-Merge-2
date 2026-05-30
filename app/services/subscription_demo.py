@@ -70,7 +70,7 @@ def create_demo_subscription(
 
     if channel == "sms" and background_tasks:
         confirmation = NotificationRequest(
-            type="sms",
+            channel="sms",
             to=user_key,
             message=(
                 "Din Heritage Connect-prenumeration är nu aktiv. "

@@ -53,7 +53,7 @@ def test_demo_travel_sends_sms_without_prior_home_ping():
 def test_confirmation_sms_does_not_block_geofencing():
     phone = "+46709992233"
     confirmation = NotificationRequest(
-        type="sms",
+        channel="sms",
         to=phone,
         message="Din Heritage Connect-prenumeration är nu aktiv.",
         user_id=phone,

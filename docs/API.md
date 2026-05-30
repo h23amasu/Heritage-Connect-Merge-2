@@ -4,11 +4,11 @@ Bas-URL (lokal): `http://localhost:8000`
 
 ## 1. Meddelandetjänst (gemensam standard)
 
-`POST /notification/send-notification`
+`POST /api/notification/send`
 
 | Fält | Typ | Krav |
 |------|-----|------|
-| type | `"sms"` \| `"email"` | Ja |
+| channel | `"sms"` \| `"email"` | Ja |
 | to | telefon `+46...` eller e-post | Ja |
 | message | sträng | Ja |
 | subject | sträng | Nej (e-post) |
@@ -19,9 +19,11 @@ Bas-URL (lokal): `http://localhost:8000`
 
 Leverantör (HelloSMS, SMTP) exponeras aldrig i svaret.
 
+**Legacy:** `POST /notification/send-notification` accepterar fortfarande fältet `type` (mappas till `channel`).
+
 **SMS-länkar:** Sätt `SITE_BASE_URL` till er publika app-URL (t.ex. Railway). Länken i SMS blir `{SITE_BASE_URL}/sites/{unesco_id}`.
 
-**Byta meddelandetjänst med annan grupp:** Sätt `NOTIFICATION_SERVICE_URL` till deras bas-URL. Geofencing och övriga flöden anropar då `POST {NOTIFICATION_SERVICE_URL}/notification/send-notification` med samma JSON som ovan. Se `GET /api/integration/config` för aktuella URL:er.
+**Byta meddelandetjänst med annan grupp:** Sätt `NOTIFICATION_SERVICE_URL` till deras bas-URL. Geofencing och övriga flöden anropar då `POST {NOTIFICATION_SERVICE_URL}/api/notification/send` med samma JSON som ovan. Se `GET /api/integration/config` för aktuella URL:er.
 
 **E-post:** Standard `EMAIL_PROVIDER=mock` loggar bara i servern – inget riktigt mail trots `success`. För leverans till inkorg: konfigurera SMTP/SendGrid i `.env` ([docs/EMAIL.md](EMAIL.md)).
 

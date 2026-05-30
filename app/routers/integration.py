@@ -4,6 +4,7 @@ Integration endpoints – dela med andra grupper (meddelande-API, SMS-länkar).
 from fastapi import APIRouter
 
 from app.core.config import settings
+from app.services.email_service import email_delivery_configured
 from app.services.message_builder import site_detail_url
 
 router = APIRouter(prefix="/api/integration", tags=["Integration"])
@@ -27,13 +28,16 @@ def integration_config():
         "site_base_url": site_base,
         "site_link_example": site_detail_url(example_site, unesco_id=example_site),
         "site_link_pattern": f"{site_base}/sites/{{unesco_id}}",
-        "notification_api_url": f"{notification_base}/notification/send-notification",
+        "notification_api_url": f"{notification_base}/api/notification/send",
+        "notification_api_legacy_url": f"{notification_base}/notification/send-notification",
         "uses_external_notification_service": bool(settings.NOTIFICATION_SERVICE_URL.strip()),
+        "email_delivery_configured": email_delivery_configured(),
         "notification_payload_example": {
-            "type": "sms",
+            "channel": "sms",
             "to": "+46700000001",
             "message": f"Du är nära Gruvorna i Falun {site_detail_url(example_site, unesco_id=example_site)}",
             "user_id": "+46700000001",
             "site_id": example_site,
         },
+        "notification_error_codes": ["invalid_type", "invalid_recipient", "cooldown"],
     }

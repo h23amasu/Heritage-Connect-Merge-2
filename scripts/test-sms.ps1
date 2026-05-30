@@ -1,7 +1,7 @@
-# Testar POST /notification/send-notification
+# Testar POST /api/notification/send
 # Kräver att servern kör: uvicorn app.main:app --reload --port 8000
 
-$uri = "http://localhost:8000/notification/send-notification"
+$uri = "http://localhost:8000/api/notification/send"
 
 # Kontrollera att servern svarar
 try {
@@ -18,7 +18,7 @@ try {
 $recipient = "+46738100354"
 
 $payload = @{
-    type    = "sms"
+    channel = "sms"
     to      = $recipient
     message = "Test fran Heritage Connect $(Get-Date -Format 'HH:mm:ss')"
     user_id = "heritage_$(Get-Date -Format 'yyyyMMddHHmmss')"

@@ -51,7 +51,7 @@ def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str]]:
 
     message = f"Din Heritage Connect-kod: {code}. Giltig i 5 min."
     notification = NotificationRequest(
-        type="sms",
+        channel="sms",
         to=normalized,
         message=message,
         user_id=normalized,
@@ -78,7 +78,7 @@ def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
 
     message = f"Din Heritage Connect-inloggningskod: {code}. Giltig i 5 min."
     notification = NotificationRequest(
-        type="email",
+        channel="email",
         to=normalized,
         message=message,
         subject="Heritage Connect – inloggningskod",

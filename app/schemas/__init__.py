@@ -5,7 +5,7 @@ of request bodies and responses.
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 # ========== World Heritage Sites ==========
@@ -115,12 +115,20 @@ class PaymentResponse(BaseModel):
 # ========== Notifications (shared course API) ==========
 
 class NotificationRequest(BaseModel):
-    type: str = Field(..., description='sms or email')
+    channel: str = Field(..., description='sms or email')
     to: str
     message: str = Field(..., min_length=1, max_length=2000)
     subject: Optional[str] = None
     user_id: Optional[str] = None
     site_id: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_type_field(cls, data):
+        if isinstance(data, dict) and "channel" not in data and "type" in data:
+            data = dict(data)
+            data["channel"] = data["type"]
+        return data
 
 
 class NotificationSuccessResponse(BaseModel):

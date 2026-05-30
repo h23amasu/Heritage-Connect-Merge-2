@@ -1,7 +1,7 @@
 """
 Router: Shared notification API (course standard).
 
-POST /notification/send-notification
+POST /api/notification/send
 """
 from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -15,11 +15,11 @@ from app.services.notification_service import (
     ERROR_COOLDOWN,
 )
 
-router = APIRouter(prefix="/notification", tags=["Notifications"])
+router = APIRouter(prefix="/api/notification", tags=["Notifications"])
+legacy_router = APIRouter(prefix="/notification", tags=["Notifications (legacy)"])
 
 
-@router.post("/send-notification")
-def send_notification(
+def _handle_send_notification(
     request: NotificationRequest,
     background_tasks: BackgroundTasks,
 ):
@@ -43,4 +43,22 @@ def send_notification(
     record_cooldown(request)
     background_tasks.add_task(dispatch_notification, request)
 
-    return {"success": True, "channel": request.type}
+    return {"success": True, "channel": request.channel}
+
+
+@router.post("/send")
+def send_notification(
+    request: NotificationRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Gemensam kursstandard – POST /api/notification/send med fältet channel."""
+    return _handle_send_notification(request, background_tasks)
+
+
+@legacy_router.post("/send-notification", include_in_schema=False)
+def send_notification_legacy(
+    request: NotificationRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Legacy – accepterar type eller channel. Använd /api/notification/send."""
+    return _handle_send_notification(request, background_tasks)

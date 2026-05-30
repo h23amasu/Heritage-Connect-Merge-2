@@ -15,7 +15,7 @@ def send_subscription_receipt(
 ) -> None:
     subject, body = build_subscription_receipt_email(phone, end_date, language)
     request = NotificationRequest(
-        type="email",
+        channel="email",
         to=email,
         subject=subject,
         message=body,

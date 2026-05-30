@@ -202,7 +202,7 @@ def process_location_update(
         unesco_id=str(unesco_id) if unesco_id else None,
     )
     notification = NotificationRequest(
-        type="sms",
+        channel="sms",
         to=user.phone_number,
         message=message,
         user_id=str(user.id),

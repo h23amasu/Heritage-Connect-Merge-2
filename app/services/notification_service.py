@@ -45,17 +45,17 @@ def validate_recipient(notification_type: str, to: str) -> Optional[str]:
 
 
 def validate_notification_request(request: NotificationRequest) -> Optional[str]:
-    err = validate_type(request.type)
+    err = validate_type(request.channel)
     if err:
         return err
     if not request.message or not request.message.strip():
         return ERROR_INVALID_RECIPIENT
-    return validate_recipient(request.type, request.to)
+    return validate_recipient(request.channel, request.to)
 
 
 def check_cooldown(request: NotificationRequest) -> bool:
     return cooldown_service.is_on_cooldown(
-        request.type,
+        request.channel,
         request.to,
         request.user_id,
         request.site_id,
@@ -64,7 +64,7 @@ def check_cooldown(request: NotificationRequest) -> bool:
 
 def record_cooldown(request: NotificationRequest) -> None:
     cooldown_service.record_send(
-        request.type,
+        request.channel,
         request.to,
         request.user_id,
         request.site_id,
@@ -82,7 +82,7 @@ def _parse_site_id(site_id: Optional[str]) -> Optional[int]:
 def dispatch_notification(request: NotificationRequest) -> bool:
     """Skickar SMS/e-post. Returnerar True om leveransen lyckades."""
     try:
-        if request.type == "sms":
+        if request.channel == "sms":
             sms_request = SMSRequest(
                 phone_number=request.to,
                 message=request.message[:160],
@@ -108,8 +108,8 @@ def dispatch_notification(request: NotificationRequest) -> bool:
         raise
     except Exception:
         logger.exception(
-            "Notification dispatch failed type=%s to=%s",
-            request.type,
+            "Notification dispatch failed channel=%s to=%s",
+            request.channel,
             request.to,
         )
         raise

@@ -25,4 +25,4 @@ HELLOSMS_TEST_MODE=true
 - Auth: HTTP Basic (API-användare + lösenord)
 - Body: JSON med `to`, `message`, valfritt `from`, `subject`, `testMode`
 
-Ert gemensamma API (`POST /notification/send-notification`) anropar HelloSMS internt när `SMS_PROVIDER=hellosms`. Svaret avslöjar inte leverantören.
+Ert gemensamma API (`POST /api/notification/send`) anropar HelloSMS internt när `SMS_PROVIDER=hellosms`. Svaret avslöjar inte leverantören.
