@@ -301,12 +301,31 @@ function normalizeApiBaseUrl(raw) {
   return url;
 }
 
+function isLocalhostApiUrl(url) {
+  try {
+    const { hostname } = new URL(normalizeApiBaseUrl(url));
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch (_) {
+    return false;
+  }
+}
+
 function isStaleApiBaseUrl(url) {
   const normalized = normalizeApiBaseUrl(url);
-  return (
+  if (
     normalized === LEGACY_DEFAULT_API_BASE_URL ||
     normalized === normalizeApiBaseUrl(LEGACY_DEFAULT_API_BASE_URL)
-  );
+  ) {
+    return true;
+  }
+  if (typeof window !== "undefined" && window.location?.protocol?.startsWith("http")) {
+    const pageHost = window.location.hostname;
+    const onLocalPage = pageHost === "localhost" || pageHost === "127.0.0.1";
+    if (!onLocalPage && isLocalhostApiUrl(normalized)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function persistApiBaseUrl(url) {
@@ -376,20 +395,66 @@ function buildApiEndpoints(baseUrl) {
 
 const DEFAULT_GEO = { latitude: 62.0, longitude: 15.0 }; // Centrum Sverige
 
-let LOCAL_HERITAGE_SITES = [];
+const SWEDISH_GEO_FALLBACK = [
+  { name: "Mining Area of the Great Copper Mountain in Falun", country: "Sweden", latitude: 60.60472, longitude: 15.63083, unesco_id: "1027", name_sv: "Gruvorna i Falun" },
+  { name: "Engelsberg Ironworks", country: "Sweden", latitude: 59.97, longitude: 16.01, unesco_id: "556", name_sv: "Engelsbergs bruk" },
+  { name: "Decorated Farmhouses of Hälsingland", country: "Sweden", latitude: 61.7072222222, longitude: 16.1958333333, unesco_id: "1282", name_sv: "Hälsingegårdar" },
+  { name: "Royal Domain of Drottningholm", country: "Sweden", latitude: 59.32306, longitude: 17.88333, unesco_id: "559", name_sv: "Drottningholms slott" },
+  { name: "Birka and Hovgården", country: "Sweden", latitude: 59.33514, longitude: 17.54264, unesco_id: "555" },
+  { name: "Hanseatic Town of Visby", country: "Sweden", latitude: 57.64167, longitude: 18.29583, unesco_id: "731" },
+  { name: "Skogskyrkogården", country: "Sweden", latitude: 59.27556, longitude: 18.09944, unesco_id: "558", name_sv: "Skogskyrkogården" },
+  { name: "Naval Port of Karlskrona", country: "Sweden", latitude: 56.16667, longitude: 15.58333, unesco_id: "871" },
+  { name: "Rock Carvings in Tanum", country: "Sweden", latitude: 58.70111, longitude: 11.34111, unesco_id: "557" },
+  { name: "Church Town of Gammelstad, Luleå", country: "Sweden", latitude: 65.64611, longitude: 22.02861, unesco_id: "762" }
+];
 
-async function loadHeritageSites() {
+let LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
+let heritageSitesLoadPromise = null;
+
+async function enrichHeritageSitesFromFullData() {
   try {
     const response = await fetch("data/heritage-sites.json");
-    LOCAL_HERITAGE_SITES = await response.json();
-    console.info(`UNESCO-databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-  } catch (err) {
-    console.warn("Kunde inte ladda UNESCO-databasen.", err);
-    LOCAL_HERITAGE_SITES = [
-      { name: "Stonehenge", country: "England", latitude: 51.1789, longitude: -1.8262 },
-      { name: "Colosseum",  country: "Italien", latitude: 41.8902, longitude: 12.4922 }
-    ];
+    if (!response.ok) return;
+    const fullSites = await response.json();
+    if (Array.isArray(fullSites) && fullSites.length > 0) {
+      LOCAL_HERITAGE_SITES = fullSites;
+      console.info(`UNESCO fullständig databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
+      await refreshGeoFromApi();
+    }
+  } catch (error) {
+    console.debug("Kunde inte ladda fullständig UNESCO-data i bakgrunden.", error);
   }
+}
+
+async function loadHeritageSitesOnce() {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch("data/heritage-geo.json");
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      LOCAL_HERITAGE_SITES = await response.json();
+      console.info(`UNESCO-geodata laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
+      void enrichHeritageSitesFromFullData();
+      return LOCAL_HERITAGE_SITES;
+    } catch (err) {
+      if (attempt < 2) {
+        await new Promise(resolve => window.setTimeout(resolve, 250 * (attempt + 1)));
+        continue;
+      }
+      console.warn("Kunde inte ladda UNESCO-geodata.", err);
+      LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
+      return LOCAL_HERITAGE_SITES;
+    }
+  }
+  return LOCAL_HERITAGE_SITES;
+}
+
+function loadHeritageSites() {
+  if (!heritageSitesLoadPromise) {
+    heritageSitesLoadPromise = loadHeritageSitesOnce();
+  }
+  return heritageSitesLoadPromise;
 }
 
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -410,8 +475,7 @@ function unescoSiteImageUrl(unescoId) {
 }
 
 let applySiteUiSeq = 0;
-let refreshGeoPending = false;
-let refreshGeoRunning = false;
+let refreshGeoTail = Promise.resolve();
 
 function isStaleUiApply(seq) {
   return seq !== applySiteUiSeq;
@@ -700,7 +764,31 @@ async function ensureApiConnection({ silent = false, refreshGeo = false } = {}) 
   } catch (error) {
     console.warn("API-test misslyckades:", error);
 
-    if (API_BASE_URL !== DEFAULT_API_BASE_URL) {
+    const fallback = resolveDefaultApiBaseUrl();
+    if (API_BASE_URL !== fallback) {
+      persistApiBaseUrl(fallback);
+      const input = document.getElementById("apiBaseUrlInput");
+      if (input) {
+        input.value = API_BASE_URL;
+      }
+
+      try {
+        const data = await probeApiConnection();
+        const name = data.app || "API";
+        updateApiStatusLabel(`OK – ${name} · ${API_BASE_URL}`);
+        if (!silent) {
+          toast(`${name} svarar`);
+        }
+        if (refreshGeo) refreshGeoFromApi();
+        return true;
+      } catch (retryError) {
+        console.warn("API-fallback misslyckades:", retryError);
+      }
+    }
+
+    const pageHost = window.location?.hostname || "";
+    const onLocalPage = pageHost === "localhost" || pageHost === "127.0.0.1";
+    if (onLocalPage && API_BASE_URL !== DEFAULT_API_BASE_URL) {
       persistApiBaseUrl(DEFAULT_API_BASE_URL);
       const input = document.getElementById("apiBaseUrlInput");
       if (input) {
@@ -710,14 +798,14 @@ async function ensureApiConnection({ silent = false, refreshGeo = false } = {}) 
       try {
         const data = await probeApiConnection();
         const name = data.app || "API";
-        updateApiStatusLabel(`OK – ${name} · ${API_BASE_URL} (bytte från otillgänglig adress)`);
+        updateApiStatusLabel(`OK – ${name} · ${API_BASE_URL} (bytte till localhost)`);
         if (!silent) {
           toast("Bytte till localhost – API svarar");
         }
         if (refreshGeo) refreshGeoFromApi();
         return true;
       } catch (retryError) {
-        console.warn("API-fallback misslyckades:", retryError);
+        console.warn("API-localhost-fallback misslyckades:", retryError);
       }
     }
 
@@ -754,7 +842,9 @@ function initApiSettings() {
     }
   });
 
-  ensureApiConnection({ silent: true, refreshGeo: false });
+  window.setTimeout(() => {
+    ensureApiConnection({ silent: true, refreshGeo: false });
+  }, 100);
 }
 
 const currentSite = {
@@ -765,6 +855,73 @@ const currentSite = {
   country: "",
   language: NEWSPAPER_LANG
 };
+
+function resolveSiteNameSync(site, targetLang = getNewspaperLang()) {
+  const localizedName = getUnescoSiteName(site, targetLang);
+  if (localizedName) return localizedName;
+  return (site?.name || "").trim();
+}
+
+function applyClosestSiteToUiSync(site) {
+  if (!site) return;
+
+  const distanceM = site.distance_m != null ? Number(site.distance_m) : null;
+  const kmFormatted = formatDistanceKm(distanceM);
+  const siteName = resolveSiteNameSync(site);
+
+  lastClosestSite = site;
+  currentSite.api_site_id = site.id ?? currentSite.api_site_id;
+  currentSite.distance_km = kmFormatted;
+  currentSite.name = siteName;
+  if (site.country) currentSite.country = site.country;
+  if (site.unesco_id) currentSite.site_id = String(site.unesco_id);
+
+  const adName = document.getElementById("adSiteName");
+  if (adName) {
+    adName.textContent = siteName || site.name || "";
+    adName.dataset.i18nDynamic = siteName || site.name ? "true" : "";
+  }
+
+  const title = document.getElementById("siteDetailTitle");
+  if (title) {
+    title.textContent = siteName || site.name || I18N_SV.LOADING_SITE;
+    title.dataset.i18nDynamic = siteName || site.name ? "true" : "";
+  }
+
+  updateDistanceLabels();
+}
+
+function renderClosestSiteNow() {
+  const site = findClosestSiteLocal(geoState.latitude, geoState.longitude);
+  if (site) {
+    applyClosestSiteToUiSync(site);
+  }
+}
+
+function showGeoLoadingState() {
+  const adName = document.getElementById("adSiteName");
+  if (adName?.dataset.i18nDynamic === "true" && adName.textContent?.trim()) {
+    return;
+  }
+  const adPill = document.getElementById("heritageDistancePill");
+  const title = document.getElementById("siteDetailTitle");
+  const detailDist = document.getElementById("siteDetailDistance");
+
+  if (adName) adName.textContent = I18N_SV.LOADING_CLOSEST;
+  if (adPill) adPill.textContent = I18N_SV.LOADING_DISTANCE;
+  if (title) title.textContent = I18N_SV.LOADING_SITE;
+  if (detailDist) detailDist.textContent = I18N_SV.LOADING_DISTANCE;
+}
+
+async function refreshGeoUiSafeguard() {
+  if (lastClosestSite) {
+    await refreshClosestSiteTextOnly(lastClosestSite, getNewspaperLang());
+    return;
+  }
+  if (LOCAL_HERITAGE_SITES.length > 0) {
+    await refreshGeoFromApi();
+  }
+}
 
 function formatDistanceKm(distanceM) {
   if (distanceM == null || Number.isNaN(distanceM)) {
@@ -809,10 +966,12 @@ function updateDistanceLabels() {
   if (adPill) {
     adPill.textContent = adText;
     adPill.dataset.i18nSource = adText;
+    adPill.dataset.i18nDynamic = kmValue != null ? "true" : "";
   }
   if (detailDist) {
     detailDist.textContent = detailText;
     detailDist.dataset.i18nSource = detailText;
+    detailDist.dataset.i18nDynamic = kmValue != null ? "true" : "";
   }
 }
 
@@ -866,6 +1025,7 @@ async function refreshClosestSiteTextOnly(site, lang) {
   if (target === "sv") {
     updateDistanceLabels();
   } else {
+    updateDistanceLabels();
     await translateDistanceLabels(target);
   }
 }
@@ -873,11 +1033,9 @@ async function refreshClosestSiteTextOnly(site, lang) {
 async function applyClosestSiteToUi(site) {
   if (!site) return;
 
+  applyClosestSiteToUiSync(site);
+
   const seq = ++applySiteUiSeq;
-
-  const distanceM = site.distance_m != null ? Number(site.distance_m) : null;
-  const kmFormatted = formatDistanceKm(distanceM);
-
   const siteName = await resolveSiteName(site);
   if (isStaleUiApply(seq)) return;
 
@@ -904,11 +1062,6 @@ async function applyClosestSiteToUi(site) {
 
   if (isStaleUiApply(seq)) return;
 
-  lastClosestSite = site;
-  currentSite.api_site_id = site.id ?? currentSite.api_site_id;
-  currentSite.distance_km = kmFormatted;
-  if (site.country) currentSite.country = site.country;
-  if (site.unesco_id) currentSite.site_id = String(site.unesco_id);
   currentSite.name = siteName;
 
   const adName = document.getElementById("adSiteName");
@@ -918,8 +1071,7 @@ async function applyClosestSiteToUi(site) {
       adName.dataset.i18nDynamic = "true";
     } else {
       delete adName.dataset.i18nDynamic;
-      await setElementI18n(adName, I18N_SV.LOADING_CLOSEST);
-      if (isStaleUiApply(seq)) return;
+      adName.textContent = I18N_SV.LOADING_CLOSEST;
     }
   }
 
@@ -936,8 +1088,7 @@ async function applyClosestSiteToUi(site) {
       title.dataset.i18nDynamic = "true";
     } else {
       delete title.dataset.i18nDynamic;
-      await setElementI18n(title, I18N_SV.LOADING_SITE);
-      if (isStaleUiApply(seq)) return;
+      title.textContent = I18N_SV.LOADING_SITE;
     }
   }
 
@@ -953,7 +1104,6 @@ async function applyClosestSiteToUi(site) {
     desc.dataset.i18nDynamic = displayDesc ? "true" : "";
   }
 
-  updateDistanceLabels();
   const lang = getNewspaperLang();
   if (lang !== "sv") {
     await translateDistanceLabels(lang);
@@ -961,26 +1111,26 @@ async function applyClosestSiteToUi(site) {
 }
 
 async function refreshGeoFromApi() {
-  refreshGeoPending = true;
-  if (refreshGeoRunning) return;
-  refreshGeoRunning = true;
-  while (refreshGeoPending) {
-    refreshGeoPending = false;
-    await refreshGeoFromApiOnce();
-  }
-  refreshGeoRunning = false;
+  refreshGeoTail = refreshGeoTail
+    .then(() => refreshGeoFromApiOnce())
+    .catch(error => {
+      console.error("Geo-uppdatering misslyckades:", error);
+    });
+  return refreshGeoTail;
 }
 
 async function refreshGeoFromApiOnce() {
-  const adPill = document.getElementById("heritageDistancePill");
-  if (adPill && !lastClosestSite) {
-    await setElementI18n(adPill, I18N_SV.LOADING_DISTANCE);
+  if (LOCAL_HERITAGE_SITES.length === 0) {
+    await loadHeritageSites();
   }
 
   const lat = geoState.latitude;
   const lng = geoState.longitude;
   const site = findClosestSiteLocal(lat, lng);
-  if (site) await applyClosestSiteToUi(site);
+  if (!site) return;
+
+  applyClosestSiteToUiSync(site);
+  await applyClosestSiteToUi(site);
 }
 
 function setGeoCoords(lat, lng, source) {
@@ -1014,6 +1164,7 @@ function applyTestPosition(value) {
   }
   stopGeoWatch();
   const [lat, lng] = value.split(",").map(Number);
+  lastClosestSite = null;
   setGeoCoords(lat, lng, "test");
   refreshGeoFromApi();
 }
@@ -1117,7 +1268,6 @@ function onGeoError(err) {
 function startGeoWatch() {
   stopGeoWatch();
   setGeoCoords(DEFAULT_GEO.latitude, DEFAULT_GEO.longitude, "default");
-  void refreshGeoFromApi();
 
   if (!navigator.geolocation) {
     return;
@@ -1419,6 +1569,37 @@ function syncReaderLanguageUi(lang) {
   }
 }
 
+async function changeDemoLanguage(lang) {
+  const target = (lang || "sv").toLowerCase().slice(0, 2);
+  document.documentElement.lang = target;
+  await applyReaderLanguage(target);
+  await refreshGeoUiSafeguard();
+}
+
+function initDemoLanguageSelect() {
+  const select = document.getElementById("demoLanguageSelect");
+  if (!select) return;
+
+  select.value = getNewspaperLang();
+  select.addEventListener("change", () => {
+    changeDemoLanguage(select.value).catch(error => {
+      console.error("Språkbyte misslyckades:", error);
+    });
+  });
+}
+
+function initGeoDemoControls() {
+  const demoSelect = document.getElementById("testPositionSelectDemo");
+  const topSelect = document.getElementById("testPositionSelect");
+
+  demoSelect?.addEventListener("change", event => {
+    applyTestPosition(event.target.value);
+  });
+  topSelect?.addEventListener("change", event => {
+    applyTestPosition(event.target.value);
+  });
+}
+
 async function applyReaderLanguage(lang) {
   const target = (lang || getNewspaperLang()).toLowerCase().slice(0, 2);
   currentSite.language = target;
@@ -1438,6 +1619,7 @@ async function applyReaderLanguage(lang) {
       : await translateBatchMap(uniqueSources, target, "sv");
 
     elements.forEach(el => {
+      if (el.dataset.i18nDynamic === "true") return;
       const source = getI18nSource(el);
       el.textContent = translatedMap[source] || source;
     });
@@ -1461,11 +1643,14 @@ async function applyReaderLanguage(lang) {
     if (target === "sv") {
       updateDistanceLabels();
     } else {
+      updateDistanceLabels();
       await translateDistanceLabels(target);
     }
 
     if (lastClosestSite) {
       await refreshClosestSiteTextOnly(lastClosestSite, target);
+    } else {
+      await refreshGeoUiSafeguard();
     }
   } catch (error) {
     console.error("Språkbyte misslyckades:", error);
@@ -2551,9 +2736,6 @@ function updateTodayDate() {
 updateTodayDate();
 
 async function bootstrapApp() {
-  captureI18nSources();
-  await loadHeritageSites();
-
   const urlPos = readUrlPosition();
   const urlSiteRef = readUrlSiteRef();
 
@@ -2561,10 +2743,13 @@ async function bootstrapApp() {
     stopGeoWatch();
     setGeoCoords(urlPos.latitude, urlPos.longitude, "url");
     syncDemoPositionSelect(urlPos.latitude, urlPos.longitude);
-    await refreshGeoFromApi();
   } else {
     initGeoPrototype();
   }
+
+  renderClosestSiteNow();
+  void loadHeritageSites().then(() => refreshGeoFromApi());
+  await refreshGeoFromApi();
 
   if (urlSiteRef) {
     await applySiteFromRef(urlSiteRef);
@@ -2572,13 +2757,22 @@ async function bootstrapApp() {
 
   void loadConfig();
   captureI18nSources();
-  await applyReaderLanguage(getNewspaperLang());
+  try {
+    await applyReaderLanguage(getNewspaperLang());
+  } finally {
+    await refreshGeoUiSafeguard();
+  }
 }
 
+renderClosestSiteNow();
 initApiSettings();
+initGeoDemoControls();
+initDemoLanguageSelect();
 bootstrapApp().catch(error => {
   console.error("Initiering misslyckades:", error);
   syncReaderLanguageUi(getNewspaperLang());
+  renderClosestSiteNow();
+  void refreshGeoFromApi();
 });
 
 document.addEventListener("keydown", event => {
@@ -2614,7 +2808,10 @@ window.isPlaceholderContact = isPlaceholderContact;
 window.saveApiBaseUrlFromInput = saveApiBaseUrlFromInput;
 window.testApiConnection = testApiConnection;
 window.applyReaderLanguage = applyReaderLanguage;
+window.changeDemoLanguage = changeDemoLanguage;
 window.refreshGeoFromApi = refreshGeoFromApi;
+window.bootstrapApp = bootstrapApp;
+window.applyTestPosition = applyTestPosition;
 window.loginWithBankId = loginWithBankId;
 window.togglePolicy = togglePolicy;
 window.askAiQuestion = askAiQuestion;

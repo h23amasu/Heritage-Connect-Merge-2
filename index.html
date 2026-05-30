@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=45" />
+  <link rel="stylesheet" href="css/style.css?v=46" />
 </head>
 <body>
   <div class="app-shell">
@@ -53,9 +53,9 @@
 
       <section class="newspaper-screen">
         <div class="page-card news-site">
-          <div class="demo-geo-bar" aria-label="Demo: välj testplats">
+          <div class="demo-geo-bar" aria-label="Demo: testplats och språk">
             <label for="testPositionSelectDemo">Demo-plats:</label>
-            <select id="testPositionSelectDemo" onchange="applyTestPosition(this.value)">
+            <select id="testPositionSelectDemo">
               <option value="">— GPS / standard —</option>
               <option value="59.33,18.07">Stockholm</option>
               <option value="60.59,15.62">Falun</option>
@@ -63,6 +63,20 @@
               <option value="57.71,11.97">Göteborg</option>
               <option value="52.52,13.40">Berlin</option>
               <option value="48.86,2.35">Paris</option>
+            </select>
+            <label for="demoLanguageSelect">Tidningsspråk:</label>
+            <select id="demoLanguageSelect" aria-label="Välj tidningsspråk för demo">
+              <option value="sv">Svenska</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="no">Norsk</option>
+              <option value="da">Dansk</option>
+              <option value="fi">Suomi</option>
+              <option value="ar">العربية</option>
+              <option value="zh">中文</option>
+              <option value="ru">Русский</option>
             </select>
           </div>
           <header class="news-masthead">
@@ -121,10 +135,10 @@
                   <div class="ad-card-body ad-clickable" role="button" tabindex="0"
                     onclick="openServiceModal('detail')" onkeydown="handleAdKey(event)">
                     <p class="ad-eyebrow" data-i18n>Världsarv nära dig</p>
-                    <p class="ad-site-name" id="adSiteName" data-i18n>Hämtar närmaste världsarv…</p>
+                    <p class="ad-site-name" id="adSiteName">Hämtar närmaste världsarv…</p>
                     <p class="ad-teaser" id="adTeaser"></p>
                     <div class="ad-mini-meta">
-                      <span class="pill" id="heritageDistancePill" data-i18n>Hämtar avstånd…</span>
+                      <span class="pill" id="heritageDistancePill">Hämtar avstånd…</span>
                       <span class="pill" id="heritageLangLabel">Svenska</span>
                     </div>
                   </div>
@@ -178,7 +192,7 @@
                 <span class="heritage-mark">N</span>
                 <span>NOSECU</span>
               </div>
-              <h2 id="siteDetailTitle" data-i18n>Hämtar världsarv…</h2>
+              <h2 id="siteDetailTitle">Hämtar världsarv…</h2>
               <div class="meta" id="siteDetailMeta"></div>
               <div class="image-box">
                 <img id="siteDetailImage" alt="" class="site-detail-img" referrerpolicy="no-referrer" decoding="async" />
@@ -193,7 +207,7 @@
               <div class="action-stack">
                 <button data-i18n onclick="openModalStep('subscribe')">Prenumerera och få SMS om världsarv nära dig</button>
               </div>
-              <div class="distance" id="siteDetailDistance" data-i18n>Hämtar avstånd…</div>
+              <div class="distance" id="siteDetailDistance">Hämtar avstånd…</div>
             </div>
           </div>
         </section>
@@ -388,6 +402,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="js/app.js?v=57"></script>
+  <script src="js/app.js?v=68"></script>
 </body>
 </html>
