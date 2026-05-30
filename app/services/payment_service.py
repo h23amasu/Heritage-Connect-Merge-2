@@ -42,7 +42,10 @@ def verify_stripe_payment_intent(
     import stripe
 
     stripe.api_key = settings.STRIPE_SECRET_KEY
-    intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    try:
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    except Exception as exc:
+        raise ValueError(f"Stripe error: {exc}") from exc
     if intent.status != "succeeded":
         return False, ""
     if expected_amount is not None and int(intent.amount) != int(expected_amount * 100):
@@ -60,7 +63,12 @@ def process_payment(
         if not stripe_configured():
             return False, ""
         expected = amount if amount and amount > 0 else None
-        return verify_stripe_payment_intent(payment_intent_id, expected)
+        try:
+            return verify_stripe_payment_intent(payment_intent_id, expected)
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError(f"Stripe error: {exc}") from exc
 
     if card_type not in ("mastercard", "visa"):
         return False, ""

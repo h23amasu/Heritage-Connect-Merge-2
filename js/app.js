@@ -443,6 +443,16 @@ function isStaleApiBaseUrl(url) {
     if (!onLocalPage && isLocalhostApiUrl(normalized)) {
       return true;
     }
+    if (!onLocalPage) {
+      try {
+        const storedHost = new URL(normalized).hostname;
+        if (storedHost !== pageHost) {
+          return true;
+        }
+      } catch (_) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -2581,13 +2591,24 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     body: JSON.stringify(paymentPayload),
   });
 
-  const data = await response.json();
+  let data = {};
+  const raw = await response.text();
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      if (!response.ok) {
+        toast(`Betalning misslyckades: ${raw.slice(0, 200) || response.statusText}`);
+        return false;
+      }
+    }
+  }
 
   if (!response.ok) {
     const detail =
       typeof data.detail === "string"
         ? data.detail
-        : data.detail?.message || JSON.stringify(data.detail || data);
+        : data.detail?.message || JSON.stringify(data.detail || data) || response.statusText;
     toast(`Betalning misslyckades: ${detail}`);
     return false;
   }
@@ -2616,6 +2637,8 @@ async function paymentComplete() {
     openModalStep("subscribe");
     return;
   }
+
+  await ensureApiConnection({ silent: true });
 
   const receiptEmail = document.getElementById("paymentReceiptEmail")?.value.trim();
   const submitBtn = document.getElementById("paymentSubmitBtn");
@@ -2683,7 +2706,13 @@ async function paymentComplete() {
     });
   } catch (error) {
     console.warn("Prenumeration/betalning misslyckades:", error);
-    toast("Kunde inte nå API – kontrollera att servern körs.");
+    const msg = error?.message || String(error);
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      toast("Kunde inte nå API – kontrollera att servern körs och att API-adressen stämmer.");
+      await ensureApiConnection({ silent: false });
+    } else {
+      toast(`Betalning misslyckades: ${msg}`);
+    }
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;

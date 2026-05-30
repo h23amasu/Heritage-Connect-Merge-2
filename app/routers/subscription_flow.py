@@ -99,12 +99,15 @@ def create_subscription_flow(
 
         payment_id = None
         if body.payment_intent_id or (body.amount and body.card_type and body.card_number):
-            ok, tx_id = process_payment(
-                Decimal(str(body.amount or 0)),
-                body.card_type or "visa",
-                body.card_number or "",
-                payment_intent_id=body.payment_intent_id,
-            )
+            try:
+                ok, tx_id = process_payment(
+                    Decimal(str(body.amount or 0)),
+                    body.card_type or "visa",
+                    body.card_number or "",
+                    payment_intent_id=body.payment_intent_id,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             if not ok:
                 raise HTTPException(status_code=400, detail="Payment failed")
             pay = Payment(

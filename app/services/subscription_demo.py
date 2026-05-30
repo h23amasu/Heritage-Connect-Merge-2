@@ -2,6 +2,7 @@
 Prenumeration utan PostgreSQL – för demo (GEOFENCING_DEMO_MODE).
 """
 from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi import BackgroundTasks
 
@@ -70,12 +71,15 @@ def create_demo_subscription(
     payment_id = None
     if body.payment_intent_id or (body.amount and body.card_type and body.card_number):
         amount = Decimal(str(body.amount or 0))
-        ok, tx_id = process_payment(
-            amount,
-            body.card_type or "visa",
-            body.card_number or "",
-            payment_intent_id=body.payment_intent_id,
-        )
+        try:
+            ok, tx_id = process_payment(
+                amount,
+                body.card_type or "visa",
+                body.card_number or "",
+                payment_intent_id=body.payment_intent_id,
+            )
+        except ValueError as exc:
+            raise exc
         if not ok:
             raise ValueError("Payment failed or not completed")
         payment_id = 1 if tx_id else None
