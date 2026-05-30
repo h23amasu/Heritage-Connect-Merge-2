@@ -18,7 +18,7 @@
         <div class="test-position" aria-label="Testpositioner för demo">
           <label class="api-settings-label" for="testPositionSelect">Testplats (demo)</label>
           <select id="testPositionSelect" onchange="applyTestPosition(this.value)">
-            <option value="">— Din riktiga GPS-position —</option>
+            <option value="">— Din riktiga GPS-position (annars Falun) —</option>
             <option value="59.33,18.07">Stockholm, Sverige</option>
             <option value="60.59,15.62">Falun, Sverige</option>
             <option value="57.71,11.97">Göteborg, Sverige</option>
@@ -56,7 +56,7 @@
           <div class="demo-geo-bar" aria-label="Demo: testplats och språk">
             <label for="testPositionSelectDemo">Demo-plats:</label>
             <select id="testPositionSelectDemo">
-              <option value="">— GPS / standard —</option>
+              <option value="">— GPS (annars Falun) —</option>
               <option value="59.33,18.07">Stockholm</option>
               <option value="60.59,15.62">Falun</option>
               <option value="59.97,16.01">Engelsberg</option>
@@ -397,6 +397,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=91"></script>
+  <script src="js/app.js?v=92"></script>
 </body>
 </html>

@@ -50,3 +50,18 @@ def test_ai_ask_falun_generic_question():
     assert data["needs_followup"] is False
     assert "Stora stöten" in data["answer"] or "Falun" in data["answer"]
     assert "engelsbergs_bruk.txt" not in data["sources"]
+
+
+def test_ai_ask_falun_when_created():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "När skapades det?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    assert "1300" in data["answer"] or "2001" in data["answer"] or "världsarv" in data["answer"].lower()

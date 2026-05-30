@@ -537,7 +537,7 @@ function buildApiEndpoints(baseUrl) {
   };
 }
 
-const DEFAULT_GEO = { latitude: 62.0, longitude: 15.0 }; // Centrum Sverige
+const DEFAULT_GEO = { latitude: 60.60472, longitude: 15.63083 }; // Falun – demo-fallback när GPS saknas
 
 const SWEDISH_GEO_FALLBACK = [
   { name: "Mining Area of the Great Copper Mountain in Falun", country: "Sweden", latitude: 60.60472, longitude: 15.63083, unesco_id: "1027", name_sv: "Gruvorna i Falun" },
