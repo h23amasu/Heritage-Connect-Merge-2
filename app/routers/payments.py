@@ -2,6 +2,8 @@
 Router: Payments
 Handles payments (Mastercard/Visa).
 """
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
