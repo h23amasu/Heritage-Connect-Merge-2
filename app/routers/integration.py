@@ -24,6 +24,7 @@ def integration_config():
     Sätt NOTIFICATION_SERVICE_URL till annan grupps bas-URL för att skicka SMS via dem.
     """
     site_base = settings.SITE_BASE_URL.rstrip("/")
+    owntracks_url = f"{site_base}/api/location/owntracks"
     notification_base = (
         settings.NOTIFICATION_SERVICE_URL.strip().rstrip("/")
         if settings.NOTIFICATION_SERVICE_URL
@@ -35,6 +36,11 @@ def integration_config():
         "site_base_url": site_base,
         "site_link_example": site_detail_url(example_site, unesco_id=example_site),
         "site_link_pattern": f"{site_base}/sites/{{unesco_id}}",
+        "owntracks_webhook_url": owntracks_url,
+        "owntracks_http_auth_configured": bool(
+            (settings.OWOTRACKS_HTTP_USER or "").strip()
+            and (settings.OWOTRACKS_HTTP_PASSWORD or "").strip()
+        ),
         "notification_api_url": f"{notification_base}/api/notification/send",
         "notification_api_legacy_url": f"{notification_base}/notification/send-notification",
         "uses_external_notification_service": bool(settings.NOTIFICATION_SERVICE_URL.strip()),
