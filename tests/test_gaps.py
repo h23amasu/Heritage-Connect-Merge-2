@@ -36,6 +36,11 @@ def test_payment_config_endpoint():
     assert "stripe_enabled" in data
 
 
+def test_payment_intent_requires_stripe():
+    response = client.post("/api/payments/intent", json={"amount": 99})
+    assert response.status_code == 503
+
+
 def test_email_auth_flow():
     client.post(
         "/api/auth/request-email-code",

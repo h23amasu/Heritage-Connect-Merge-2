@@ -13,6 +13,7 @@ from app.schemas import (
 )
 from app.services.geofencing_demo import _demo_users
 from app.services.receipt_service import send_subscription_receipt
+from app.services.payment_service import process_payment
 
 _demo_subscriptions: dict[str, dict] = {}
 
@@ -66,6 +67,19 @@ def create_demo_subscription(
         "end_date": str(end),
     }
 
+    payment_id = None
+    if body.payment_intent_id or (body.amount and body.card_type and body.card_number):
+        amount = Decimal(str(body.amount or 0))
+        ok, tx_id = process_payment(
+            amount,
+            body.card_type or "visa",
+            body.card_number or "",
+            payment_intent_id=body.payment_intent_id,
+        )
+        if not ok:
+            raise ValueError("Payment failed or not completed")
+        payment_id = 1 if tx_id else None
+
     receipt_email = (body.email or (body.to if channel == "email" else None) or "").strip()
     if receipt_email and "@" in receipt_email and background_tasks:
         contact_for_receipt = body.phone or user_key
@@ -83,7 +97,7 @@ def create_demo_subscription(
         user_id=user_id,
         subscription_id=1,
         subscription_active=True,
-        payment_id=None,
+        payment_id=payment_id,
         end_date=str(end),
         receipt_sent=bool(receipt_email and "@" in receipt_email),
     )

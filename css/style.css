@@ -280,6 +280,19 @@
       border-radius: inherit;
     }
 
+    .stripe-payment-mount {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .stripe-payment-mount[hidden],
+    #mockPaymentFields[hidden] {
+      display: none !important;
+    }
+
     .demo-geo-bar select {
       flex: 1;
       min-width: 180px;

@@ -208,6 +208,8 @@ const UI_MODAL_I18N = {
       "Mock payment in demo. With Stripe key in .env, Stripe PaymentIntent is called.",
     "Mock-betalning i demo. Sätt PAYMENT_PROVIDER=stripe och STRIPE_SECRET_KEY i .env för riktig sandbox.":
       "Mock payment in demo. Set PAYMENT_PROVIDER=stripe and STRIPE_SECRET_KEY in .env for real sandbox.",
+    "Stripe testläge – ange kortuppgifter nedan. Testkort: 4242 4242 4242 4242.":
+      "Stripe test mode – enter card details below. Test card: 4242 4242 4242 4242.",
     "E-post för kvitto (valfritt)": "Email for receipt (optional)",
     "Betala med Stripe (demo)": "Pay with Stripe (demo)",
     "Tack för din prenumeration. Prenumerationen är nu aktiv.":
@@ -504,6 +506,7 @@ function buildApiEndpoints(baseUrl) {
     cancelSubscription: `${base}/api/subscription/cancel`,
     locationUpdate: `${base}/api/location/update`,
     paymentConfig: `${base}/api/payments/config`,
+    paymentIntent: `${base}/api/payments/intent`,
     translate: `${base}/api/translate`,
     translateBatch: `${base}/api/translate/batch`,
     aiAsk: `${base}/api/ai/ask`,
@@ -742,6 +745,11 @@ let PAYMENT_CONFIG = {
   stripe_sandbox: false,
   stripe_publishable_key: null,
 };
+let stripeClient = null;
+let stripeElements = null;
+let stripePaymentElement = null;
+let stripeClientSecret = null;
+let stripeIntentAmount = null;
 
 let locationReportTimer = null;
 let geoWatchId = null;
@@ -798,6 +806,98 @@ async function loadPaymentConfig() {
   } catch (_) {
     clearTimeout(timeoutId);
     /* API offline – mock-betalning i UI */
+  }
+}
+
+function loadStripeJs() {
+  if (window.Stripe) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://js.stripe.com/v3/"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Stripe.js failed to load")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://js.stripe.com/v3/";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Stripe.js failed to load"));
+    document.head.appendChild(script);
+  });
+}
+
+function destroyStripePaymentElement() {
+  if (stripePaymentElement) {
+    stripePaymentElement.unmount();
+    stripePaymentElement = null;
+  }
+  stripeElements = null;
+  stripeClientSecret = null;
+  stripeIntentAmount = null;
+}
+
+async function prepareStripePaymentStep() {
+  await loadPaymentConfig();
+  await updatePaymentProviderUi();
+
+  const mockFields = document.getElementById("mockPaymentFields");
+  const stripeMount = document.getElementById("stripePaymentMount");
+
+  if (!PAYMENT_CONFIG.stripe_enabled || !PAYMENT_CONFIG.stripe_publishable_key) {
+    destroyStripePaymentElement();
+    mockFields?.removeAttribute("hidden");
+    stripeMount?.setAttribute("hidden", "");
+    return;
+  }
+
+  mockFields?.setAttribute("hidden", "");
+  stripeMount?.removeAttribute("hidden");
+
+  if (
+    stripeClientSecret &&
+    stripeIntentAmount === SUBSCRIPTION_PRICE_SEK &&
+    stripePaymentElement
+  ) {
+    return;
+  }
+
+  destroyStripePaymentElement();
+
+  try {
+    await loadStripeJs();
+    stripeClient = window.Stripe(PAYMENT_CONFIG.stripe_publishable_key);
+
+    const response = await fetch(API_ENDPOINTS.paymentIntent, {
+      method: "POST",
+      headers: apiRequestHeaders(),
+      body: JSON.stringify({
+        amount: SUBSCRIPTION_PRICE_SEK,
+        site_id: currentSite.site_id || undefined,
+        site_name: currentSite.name || undefined,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      const detail = typeof data.detail === "string" ? data.detail : "Kunde inte starta Stripe-betalning.";
+      toast(detail);
+      return;
+    }
+
+    stripeClientSecret = data.client_secret;
+    stripeIntentAmount = SUBSCRIPTION_PRICE_SEK;
+    stripeElements = stripeClient.elements({
+      clientSecret: stripeClientSecret,
+      appearance: { theme: "stripe" },
+    });
+    stripePaymentElement = stripeElements.create("payment");
+    stripePaymentElement.mount("#stripe-payment-element");
+  } catch (error) {
+    console.error("Stripe init failed:", error);
+    toast("Kunde inte ladda Stripe-betalning.");
   }
 }
 
@@ -1931,6 +2031,7 @@ function openModalStep(step) {
     if (step === "payment") {
       await updatePaymentProviderUi();
       await updatePriceSummaryBox();
+      await prepareStripePaymentStep();
     }
     await updateModalProgressTitle(getNewspaperLang());
 
@@ -1999,6 +2100,9 @@ function selectDuration(element) {
   prototypeState.duration_days = parseInt(element.dataset.days, 10) || 30;
   SUBSCRIPTION_PRICE_SEK = parseInt(element.dataset.price, 10) || SUBSCRIPTION_PRICE_SEK;
   updatePriceSummaryBox();
+  if (document.getElementById("payment")?.classList.contains("active")) {
+    prepareStripePaymentStep().catch(error => console.error("Stripe reload failed:", error));
+  }
 }
 
 async function updatePaymentProviderUi() {
@@ -2011,14 +2115,27 @@ async function updatePaymentProviderUi() {
   }
 
   const stripeHint = document.getElementById("stripePaymentHint");
-  if (stripeHint) {
-    if (PAYMENT_CONFIG.stripe_enabled) {
-      const mode = PAYMENT_CONFIG.stripe_sandbox ? "Stripe sandbox" : "Stripe";
-      stripeHint.textContent =
-        `${mode} aktiv – testkort 4242… debiteras via Stripe PaymentIntent.`;
-    } else {
+    if (stripeHint) {
+      if (PAYMENT_CONFIG.stripe_enabled) {
+        const svText = PAYMENT_CONFIG.stripe_sandbox
+          ? "Stripe testläge – ange kortuppgifter nedan. Testkort: 4242 4242 4242 4242."
+          : "Stripe – ange kortuppgifter nedan.";
+        await setElementI18n(stripeHint, svText);
+      } else {
       stripeHint.textContent =
         "Mock-betalning i demo. Sätt PAYMENT_PROVIDER=stripe och STRIPE_SECRET_KEY i .env för riktig sandbox.";
+    }
+  }
+
+  const mockFields = document.getElementById("mockPaymentFields");
+  const stripeMount = document.getElementById("stripePaymentMount");
+  if (mockFields && stripeMount) {
+    if (PAYMENT_CONFIG.stripe_enabled) {
+      mockFields.setAttribute("hidden", "");
+      stripeMount.removeAttribute("hidden");
+    } else {
+      mockFields.removeAttribute("hidden");
+      stripeMount.setAttribute("hidden", "");
     }
   }
 }
@@ -2123,7 +2240,10 @@ function buildSubscriptionCreatePayload(paymentFields = {}) {
     payload.email = receiptEmail;
   }
 
-  if (paymentFields.amount && paymentFields.card_type && paymentFields.card_number) {
+  if (paymentFields.payment_intent_id) {
+    payload.amount = paymentFields.amount;
+    payload.payment_intent_id = paymentFields.payment_intent_id;
+  } else if (paymentFields.amount && paymentFields.card_type && paymentFields.card_number) {
     payload.amount = paymentFields.amount;
     payload.card_type = paymentFields.card_type;
     payload.card_number = paymentFields.card_number;
@@ -2446,31 +2566,8 @@ function sendConfirmationNotificationPayload() {
   return confirmationPayload;
 }
 
-async function paymentComplete() {
-  if (!isTermsAccepted()) {
-    toast("Du måste godkänna villkoren och integritetspolicyn.");
-    openModalStep("subscribe");
-    return;
-  }
-
-  const cardTypeChoice = getSelectedChoice("paymentCardType");
-  const cardType = cardTypeChoice?.includes("master") ? "mastercard" : "visa";
-  const cardNumber = (
-    document.getElementById("paymentCardNumber")?.value || ""
-  ).replace(/\s/g, "");
-  const receiptEmail = document.getElementById("paymentReceiptEmail")?.value.trim();
-
-  if (!cardNumber || cardNumber.length < 12) {
-    toast("Ange ett giltigt kortnummer (test).");
-    return;
-  }
-
-  const paymentPayload = buildSubscriptionCreatePayload({
-    amount: SUBSCRIPTION_PRICE_SEK,
-    card_type: cardType,
-    card_number: cardNumber,
-    email: receiptEmail || undefined
-  });
+async function completeSubscriptionAfterPayment(paymentFields) {
+  const paymentPayload = buildSubscriptionCreatePayload(paymentFields);
 
   logApiPayload(
     "Betalning och prenumeration",
@@ -2478,6 +2575,49 @@ async function paymentComplete() {
     paymentPayload
   );
 
+  const response = await fetch(API_ENDPOINTS.createSubscription, {
+    method: "POST",
+    headers: apiRequestHeaders(),
+    body: JSON.stringify(paymentPayload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const detail =
+      typeof data.detail === "string"
+        ? data.detail
+        : data.detail?.message || JSON.stringify(data.detail || data);
+    toast(`Betalning misslyckades: ${detail}`);
+    return false;
+  }
+
+  prototypeState.payment_provider = PAYMENT_CONFIG.stripe_enabled ? "stripe" : "mock";
+  prototypeState.subscription_active = Boolean(data.subscription_active);
+  prototypeState.user_id = data.user_id || prototypeState.user_id;
+  prototypeState.last_subscription = data;
+
+  updateConfirmationMessage({
+    receipt_sent: data.receipt_sent,
+    end_date: data.end_date,
+  });
+  syncSettingsChannelButtons();
+  openModalStep("confirmation");
+  toast("Betalning genomförd. Prenumerationen är aktiv.");
+
+  sendConfirmationNotificationPayload();
+  startLocationReporting();
+  return true;
+}
+
+async function paymentComplete() {
+  if (!isTermsAccepted()) {
+    toast("Du måste godkänna villkoren och integritetspolicyn.");
+    openModalStep("subscribe");
+    return;
+  }
+
+  const receiptEmail = document.getElementById("paymentReceiptEmail")?.value.trim();
   const submitBtn = document.getElementById("paymentSubmitBtn");
   if (submitBtn) {
     submitBtn.disabled = true;
@@ -2485,45 +2625,70 @@ async function paymentComplete() {
   }
 
   try {
-    const response = await fetch(API_ENDPOINTS.createSubscription, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify(paymentPayload)
-    });
+    if (PAYMENT_CONFIG.stripe_enabled) {
+      if (!stripeClient || !stripeElements || !stripeClientSecret) {
+        toast("Stripe laddas – försök igen om ett ögonblick.");
+        await prepareStripePaymentStep();
+        return;
+      }
 
-    const data = await response.json();
+      const result = await stripeClient.confirmPayment({
+        elements: stripeElements,
+        clientSecret: stripeClientSecret,
+        redirect: "if_required",
+        confirmParams: {
+          payment_method_data: {
+            billing_details: {
+              email: receiptEmail || undefined,
+            },
+          },
+        },
+      });
 
-    if (!response.ok) {
-      const detail =
-        typeof data.detail === "string"
-          ? data.detail
-          : data.detail?.message || JSON.stringify(data.detail || data);
-      toast(`Betalning misslyckades: ${detail}`);
+      if (result.error) {
+        toast(result.error.message || "Betalning misslyckades.");
+        return;
+      }
+
+      const paymentIntent = result.paymentIntent;
+      if (!paymentIntent || paymentIntent.status !== "succeeded") {
+        toast("Betalningen kunde inte bekräftas.");
+        return;
+      }
+
+      await completeSubscriptionAfterPayment({
+        amount: SUBSCRIPTION_PRICE_SEK,
+        payment_intent_id: paymentIntent.id,
+        email: receiptEmail || undefined,
+      });
       return;
     }
 
-    prototypeState.payment_provider = "stripe";
-    prototypeState.subscription_active = Boolean(data.subscription_active);
-    prototypeState.user_id = data.user_id || prototypeState.user_id;
-    prototypeState.last_subscription = data;
+    const cardTypeChoice = getSelectedChoice("paymentCardType");
+    const cardType = cardTypeChoice?.includes("master") ? "mastercard" : "visa";
+    const cardNumber = (
+      document.getElementById("paymentCardNumber")?.value || ""
+    ).replace(/\s/g, "");
 
-    updateConfirmationMessage({
-      receipt_sent: data.receipt_sent,
-      end_date: data.end_date
+    if (!cardNumber || cardNumber.length < 12) {
+      toast("Ange ett giltigt kortnummer (test).");
+      return;
+    }
+
+    await completeSubscriptionAfterPayment({
+      amount: SUBSCRIPTION_PRICE_SEK,
+      card_type: cardType,
+      card_number: cardNumber,
+      email: receiptEmail || undefined,
     });
-    syncSettingsChannelButtons();
-    openModalStep("confirmation");
-    toast("Betalning genomförd. Prenumerationen är aktiv.");
-
-    sendConfirmationNotificationPayload();
-    startLocationReporting();
   } catch (error) {
     console.warn("Prenumeration/betalning misslyckades:", error);
     toast("Kunde inte nå API – kontrollera att servern körs.");
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      updatePaymentProviderUi();
+      submitBtn.textContent = "Betala och starta prenumeration";
+      updatePaymentProviderUi().catch(() => {});
     }
   }
 }

@@ -7,8 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.payment import Payment
-from app.schemas import PaymentCreate, PaymentResponse
-from app.services.payment_service import process_payment
+from app.schemas import PaymentCreate, PaymentIntentCreate, PaymentIntentResponse, PaymentResponse
+from app.services.payment_service import (
+    create_stripe_payment_intent,
+    process_payment,
+    stripe_configured,
+)
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -29,6 +33,40 @@ def payment_config():
         "stripe_sandbox": secret.startswith("sk_test_"),
         "stripe_publishable_key": publishable if stripe_enabled else None,
     }
+
+
+@router.post("/intent", response_model=PaymentIntentResponse)
+def create_payment_intent(body: PaymentIntentCreate):
+    """Skapar Stripe PaymentIntent för Payment Element (test/live enligt nyckel)."""
+    from app.core.config import settings
+
+    if not stripe_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe is not configured. Set PAYMENT_PROVIDER=stripe and STRIPE_SECRET_KEY.",
+        )
+    if not settings.STRIPE_PUBLISHABLE_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="STRIPE_PUBLISHABLE_KEY is required for Stripe checkout.",
+        )
+
+    try:
+        metadata = {}
+        if body.site_id:
+            metadata["site_id"] = body.site_id
+        if body.site_name:
+            metadata["site_name"] = body.site_name[:200]
+        client_secret, payment_intent_id = create_stripe_payment_intent(
+            Decimal(str(body.amount)),
+            metadata=metadata,
+        )
+        return PaymentIntentResponse(
+            client_secret=client_secret,
+            payment_intent_id=payment_intent_id,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {exc}") from exc
 
 
 @router.post("/", response_model=PaymentResponse, status_code=201)

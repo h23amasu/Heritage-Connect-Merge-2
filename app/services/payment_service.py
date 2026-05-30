@@ -4,49 +4,69 @@ Prenumeration förnyas aldrig automatiskt (engångsbetalning).
 """
 import uuid
 from decimal import Decimal
-from typing import Tuple
+from typing import Optional, Tuple
 
 from app.core.config import settings
 
 
-def _process_stripe(
-    amount: Decimal,
-    card_type: str,
-    card_number: str,
-) -> Tuple[bool, str]:
-    try:
-        import stripe
+def stripe_configured() -> bool:
+    provider = (settings.PAYMENT_PROVIDER or "mock").lower()
+    return provider == "stripe" and bool(settings.STRIPE_SECRET_KEY)
 
-        stripe.api_key = settings.STRIPE_SECRET_KEY
-        # Testmiljö: PaymentIntent med kort (kurs/demo – minimal integration)
-        intent = stripe.PaymentIntent.create(
-            amount=int(amount * 100),
-            currency="sek",
-            payment_method_types=["card"],
-            metadata={"card_type": card_type},
-            description="Heritage Connect prenumeration",
-        )
-        # I produktion: bekräfta med payment_method från Stripe Elements
-        if intent and intent.id:
-            return True, intent.id
+
+def create_stripe_payment_intent(
+    amount: Decimal,
+    metadata: Optional[dict] = None,
+) -> Tuple[str, str]:
+    """Skapar PaymentIntent och returnerar (client_secret, payment_intent_id)."""
+    import stripe
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    intent = stripe.PaymentIntent.create(
+        amount=int(amount * 100),
+        currency="sek",
+        automatic_payment_methods={"enabled": True},
+        metadata=metadata or {},
+        description="Heritage Connect prenumeration",
+    )
+    if not intent.client_secret or not intent.id:
+        raise RuntimeError("Stripe PaymentIntent saknar client_secret")
+    return intent.client_secret, intent.id
+
+
+def verify_stripe_payment_intent(
+    payment_intent_id: str,
+    expected_amount: Optional[Decimal] = None,
+) -> Tuple[bool, str]:
+    """Verifierar att PaymentIntent är succeeded (och valfritt belopp)."""
+    import stripe
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+    if intent.status != "succeeded":
         return False, ""
-    except Exception:
+    if expected_amount is not None and int(intent.amount) != int(expected_amount * 100):
         return False, ""
+    return True, intent.id
 
 
 def process_payment(
     amount: Decimal,
     card_type: str,
     card_number: str,
+    payment_intent_id: Optional[str] = None,
 ) -> Tuple[bool, str]:
+    if payment_intent_id:
+        if not stripe_configured():
+            return False, ""
+        expected = amount if amount and amount > 0 else None
+        return verify_stripe_payment_intent(payment_intent_id, expected)
+
     if card_type not in ("mastercard", "visa"):
         return False, ""
 
-    provider = (settings.PAYMENT_PROVIDER or "mock").lower()
-    if provider == "stripe" and settings.STRIPE_SECRET_KEY:
-        ok, tx_id = _process_stripe(amount, card_type, card_number)
-        if ok:
-            return True, tx_id
+    if stripe_configured():
+        return False, ""
 
     print(f"[MOCK PAYMENT] {amount} SEK, {card_type}")
     return True, f"mock_tx_{uuid.uuid4().hex[:16]}"

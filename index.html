@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=48" />
+  <link rel="stylesheet" href="css/style.css?v=49" />
 </head>
 <body>
   <div class="app-shell">
@@ -310,13 +310,18 @@
                 <p class="small-muted" data-i18n>Du kan avsluta prenumerationen när som helst.</p>
 
                 <div id="stripePaymentFields">
-                  <label for="paymentCardType" data-i18n>Korttyp</label>
-                  <div class="choice-row" data-choice-group="paymentCardType">
-                    <div class="choice selected" onclick="selectChoice(this)">Visa</div>
-                    <div class="choice" onclick="selectChoice(this)">Mastercard</div>
+                  <div id="mockPaymentFields">
+                    <label for="paymentCardType" data-i18n>Korttyp</label>
+                    <div class="choice-row" data-choice-group="paymentCardType">
+                      <div class="choice selected" onclick="selectChoice(this)">Visa</div>
+                      <div class="choice" onclick="selectChoice(this)">Mastercard</div>
+                    </div>
+                    <label for="paymentCardNumber" data-i18n>Kortnummer (test)</label>
+                    <input id="paymentCardNumber" type="text" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242" value="4242424242424242" />
                   </div>
-                  <label for="paymentCardNumber" data-i18n>Kortnummer (test)</label>
-                  <input id="paymentCardNumber" type="text" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242" value="4242424242424242" />
+                  <div id="stripePaymentMount" class="stripe-payment-mount" hidden>
+                    <div id="stripe-payment-element"></div>
+                  </div>
                   <p class="small-muted" id="stripePaymentHint" data-i18n>Mock-betalning i demo. Med Stripe-nyckel i .env anropas Stripe PaymentIntent.</p>
                 </div>
 
@@ -397,6 +402,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=78"></script>
+  <script src="js/app.js?v=79"></script>
 </body>
 </html>

@@ -88,6 +88,18 @@ class PaymentCreate(BaseModel):
     card_number: str
 
 
+class PaymentIntentCreate(BaseModel):
+    amount: float = Field(..., gt=0)
+    site_id: Optional[str] = None
+    site_name: Optional[str] = None
+
+
+class PaymentIntentResponse(BaseModel):
+    success: bool = True
+    client_secret: str
+    payment_intent_id: str
+
+
 class PaymentResponse(BaseModel):
     id: int
     amount: Decimal
@@ -287,6 +299,7 @@ class SubscriptionFlowCreateRequest(BaseModel):
     amount: Optional[float] = None
     card_type: Optional[str] = None
     card_number: Optional[str] = None
+    payment_intent_id: Optional[str] = None
 
 
 class SubscriptionFlowResponse(BaseModel):

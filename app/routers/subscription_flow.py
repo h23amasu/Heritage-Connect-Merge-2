@@ -98,20 +98,21 @@ def create_subscription_flow(
         db.flush()
 
         payment_id = None
-        if body.amount and body.card_type and body.card_number:
+        if body.payment_intent_id or (body.amount and body.card_type and body.card_number):
             ok, tx_id = process_payment(
-                Decimal(str(body.amount)),
-                body.card_type,
-                body.card_number,
+                Decimal(str(body.amount or 0)),
+                body.card_type or "visa",
+                body.card_number or "",
+                payment_intent_id=body.payment_intent_id,
             )
             if not ok:
                 raise HTTPException(status_code=400, detail="Payment failed")
             pay = Payment(
                 user_id=user.id,
                 subscription_id=sub.id,
-                amount=Decimal(str(body.amount)),
+                amount=Decimal(str(body.amount or 0)),
                 currency="SEK",
-                card_type=body.card_type,
+                card_type=body.card_type or "stripe",
                 status="completed",
                 transaction_id=tx_id,
             )
