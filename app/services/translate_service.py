@@ -8,17 +8,27 @@ from app.core.config import settings
 
 import re
 
-# Vanliga språk i demo – API accepterar alla tvåbokstaviga ISO 639-1-koder via Google Translate.
-SUPPORTED_LANGUAGES = frozenset({
-    "sv", "en", "de", "fr", "es", "no", "da",
-    "ar", "zh", "ru", "fi", "pt", "it", "nl", "pl", "ja", "ko",
-})
-
+# ISO 639-1 (två bokstäver) – alla koder accepteras; översättning via Google Translate.
 _LANG_CODE = re.compile(r"^[a-z]{2}$")
+
+# Alias som Google Translate förväntar sig (ISO 639-1 → Google).
+_GOOGLE_TRANSLATE_ALIASES: dict[str, str] = {
+    "nb": "no",
+    "nn": "no",
+    "iw": "he",
+    "in": "id",
+    "ji": "yi",
+    "jw": "jv",
+}
 
 
 def normalize_language_code(code: str) -> str:
-    return (code or "").lower().strip()[:2]
+    return (code or "").lower().strip().split("-")[0][:2]
+
+
+def map_google_translate_code(code: str) -> str:
+    normalized = normalize_language_code(code)
+    return _GOOGLE_TRANSLATE_ALIASES.get(normalized, normalized)
 
 
 def is_valid_language_code(code: str) -> bool:
@@ -63,7 +73,9 @@ def _translate_deep(text: str, source: str, target: str) -> str | None:
     try:
         from deep_translator import GoogleTranslator
 
-        translated = GoogleTranslator(source=source, target=target).translate(text)
+        src = map_google_translate_code(source)
+        tgt = map_google_translate_code(target)
+        translated = GoogleTranslator(source=src, target=tgt).translate(text)
         return translated if translated else None
     except Exception:
         return None

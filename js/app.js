@@ -9,37 +9,35 @@ const LEGACY_DEFAULT_API_BASE_URL = "https://fling-sneer-margarita.ngrok-free.de
 const API_BASE_STORAGE_KEY = "heritage_connect_api_base_url";
 const API_TOKEN = "hemlig-nyckel";
 
-/**
- * Tidningens språk läses från HTML-elementets lang-attribut (t.ex. <html lang="sv">).
- * Ladda om sidan efter att du ändrat lang i index.html.
- */
+/** Standard vid sidladdning: `<html lang="…">` i index.html (ISO 639-1, t.ex. sv, ja, hi). */
 function getNewspaperLang() {
-  return (document.documentElement.lang || "sv").slice(0, 2).toLowerCase();
+  return normalizeLanguageCode(document.documentElement.lang || "sv");
+}
+
+/** Aktivt tidningsspråk (dropdown-val eller html lang efter omladdning). */
+let preferredReaderLang = null;
+
+function getActiveReaderLang() {
+  if (preferredReaderLang) {
+    return normalizeLanguageCode(preferredReaderLang);
+  }
+  return getNewspaperLang();
+}
+
+function syncDemoLanguageSelectToLang(lang) {
+  const select = document.getElementById("demoLanguageSelect");
+  const target = normalizeLanguageCode(lang || getNewspaperLang());
+  preferredReaderLang = isValidLanguageCode(target) ? target : "sv";
+
+  if (!select) return preferredReaderLang;
+
+  ensureLanguageOption(select, preferredReaderLang);
+  select.dataset.selectedLang = preferredReaderLang;
+  return preferredReaderLang;
 }
 
 const NEWSPAPER_LANG = getNewspaperLang();
 
-const READER_LANG_LABELS = {
-  sv: "Svenska",
-  en: "English",
-  de: "Deutsch",
-  fr: "Français",
-  es: "Español",
-  no: "Norsk",
-  da: "Dansk",
-  ru: "Русский",
-  ar: "العربية",
-  zh: "中文",
-  fi: "Suomi",
-  pt: "Português",
-  it: "Italiano",
-  nl: "Nederlands",
-  pl: "Polski",
-  ja: "日本語",
-  ko: "한국어"
-};
-
-/** Förifyllda tidningstexter (valfri cache när översättnings-API inte nås). */
 const NEWSPAPER_I18N = {
   en: {
     "Digital upplaga": "Digital edition",
@@ -142,9 +140,110 @@ const NEWSPAPER_I18N = {
   }
 };
 
+/** Modal och formulärtexter – offline för snabb demo utan API. */
+const UI_MODAL_I18N = {
+  en: {
+    "Steg 1 av 4: Världsarvsinformation": "Step 1 of 4: World heritage information",
+    "Tillbaka till tidningen": "Back to the newspaper",
+    "Tillbaka": "Back",
+    "Tillbaka till prenumeration": "Back to subscription",
+    "Tillbaka till världsarvet": "Back to world heritage site",
+    "Steg 2 av 4: Starta prenumeration": "Step 2 of 4: Start subscription",
+    "Steg 3 av 4: Betalning": "Step 3 of 4: Payment",
+    "Steg 4 av 4: Bekräftelse": "Step 4 of 4: Confirmation",
+    "Skapa en prenumeration för att få SMS om världsarv nära dig. Konto skapas i samband med betalningen.":
+      "Create a subscription to receive SMS about world heritage near you. An account is created when you pay.",
+    "Skapa konto": "Create account",
+    "Ange dina uppgifter och starta prenumerationen.": "Enter your details and start the subscription.",
+    "Mobilnummer": "Mobile number",
+    "Välj notiskanal": "Choose notification channel",
+    "E-post": "Email",
+    "Betalning i nästa steg via Stripe (Visa/Mastercard). Kort sparas inte i Heritage Connect.":
+      "Payment in the next step via Stripe (Visa/Mastercard). Card details are not stored in Heritage Connect.",
+    "Jag godkänner villkoren och": "I accept the terms and",
+    "integritetspolicyn": "privacy policy",
+    "Integritetspolicy – Heritage Connect": "Privacy policy – Heritage Connect",
+    "Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress för att kunna skicka notiser om UNESCO-världsarv i närheten av din position.":
+      "Heritage Connect collects your mobile number and/or email address to send notifications about UNESCO world heritage near your location.",
+    "Din position används enbart för att avgöra vilket världsarv som är närmast dig. Positionsdata lagras inte permanent.":
+      "Your location is only used to determine which world heritage site is nearest. Location data is not stored permanently.",
+    "Du kan när som helst avsluta din prenumeration och begära radering av dina uppgifter via din profil eller genom att kontakta oss.":
+      "You can cancel your subscription and request deletion of your data at any time via your profile or by contacting us.",
+    "Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect.":
+      "Payment information is handled by Stripe and is not stored by Heritage Connect.",
+    "Gå vidare till betalning": "Continue to payment",
+    "eller": "or",
+    "Har du redan ett konto?": "Already have an account?",
+    "🏦 Logga in med BankID (Sverige)": "🏦 Log in with BankID (Sweden)",
+    "eller via SMS-kod": "or via SMS code",
+    "Ange ditt registrerade mobilnummer.": "Enter your registered mobile number.",
+    "Skicka SMS-kod": "Send SMS code",
+    "Engångskod via SMS": "One-time code via SMS",
+    "Utveckling: efter \"Skicka SMS-kod\" är koden 123456 (samma som i API-test).":
+      "Development: after \"Send SMS code\" the code is 123456 (same as in the API test).",
+    "Logga in": "Log in",
+    "eller via e-postkod (utlandet)": "or via email code (international)",
+    "Ange din registrerade e-postadress.": "Enter your registered email address.",
+    "Skicka e-postkod": "Send email code",
+    "Engångskod via e-post": "One-time code via email",
+    "Utveckling: efter \"Skicka e-postkod\" är koden 123456.":
+      "Development: after \"Send email code\" the code is 123456.",
+    "Logga in med e-post": "Log in with email",
+    "Betala prenumeration": "Pay for subscription",
+    "Sammanfattning innan betalning.": "Summary before payment.",
+    "Prenumeration: SMS om världsarv nära dig": "Subscription: SMS about world heritage near you",
+    "Pris: 99 SEK (engångsbetalning, ingen auto-förnyelse – SMS-påminnelse skickas 3 dagar innan utgång)":
+      "Price: 99 SEK (one-time payment, no auto-renewal – SMS reminder sent 3 days before expiry)",
+    "Kort hanteras av betalleverantören – sparas inte i Heritage Connect":
+      "Card is handled by the payment provider – not stored in Heritage Connect",
+    "Välj prenumerationsperiod": "Choose subscription period",
+    "1 månad": "1 month",
+    "3 månader": "3 months",
+    "6 månader": "6 months",
+    "Du kan avsluta prenumerationen när som helst.": "You can cancel the subscription at any time.",
+    "Korttyp": "Card type",
+    "Kortnummer (test)": "Card number (test)",
+    "Mock-betalning i demo. Med Stripe-nyckel i .env anropas Stripe PaymentIntent.":
+      "Mock payment in demo. With Stripe key in .env, Stripe PaymentIntent is called.",
+    "Mock-betalning i demo. Sätt PAYMENT_PROVIDER=stripe och STRIPE_SECRET_KEY i .env för riktig sandbox.":
+      "Mock payment in demo. Set PAYMENT_PROVIDER=stripe and STRIPE_SECRET_KEY in .env for real sandbox.",
+    "E-post för kvitto (valfritt)": "Email for receipt (optional)",
+    "Betala med Stripe (demo)": "Pay with Stripe (demo)",
+    "Tack för din prenumeration. Prenumerationen är nu aktiv.":
+      "Thank you for your subscription. Your subscription is now active.",
+    "En bekräftelse skickas till vald notiskanal.": "A confirmation will be sent to your chosen notification channel.",
+    "NOTISKANAL": "NOTIFICATION CHANNEL",
+    "📱 SMS-notiser": "📱 SMS notifications",
+    "✉️ E-postnotiser": "✉️ Email notifications",
+    "Aktiv kanal: SMS-notiser": "Active channel: SMS notifications",
+    "BETALNINGSINFORMATION": "PAYMENT INFORMATION",
+    "Betalning via Stripe (Visa/Mastercard). Ingen automatisk förnyelse.":
+      "Payment via Stripe (Visa/Mastercard). No automatic renewal.",
+    "Ändra betalningsmetod": "Change payment method",
+    "INNEHÅLLSPREFERENSER": "CONTENT PREFERENCES",
+    "Markera som besökt, inga fler SMS om detta världsarv":
+      "Mark as visited, no more SMS about this world heritage site",
+    "FRÅGA AI OM DETTA VÄRLDSARV": "ASK AI ABOUT THIS WORLD HERITAGE SITE",
+    "Ställ en fråga om det världsarv du är nära. AI:n svarar bara från lokala UNESCO-källor.":
+      "Ask a question about the world heritage site you are near. The AI only answers from local UNESCO sources.",
+    "Vad är unikt med detta världsarv?": "What is unique about this world heritage site?",
+    "Fråga": "Ask",
+    "PRENUMERATION": "SUBSCRIPTION",
+    "Avsluta prenumeration": "Cancel subscription",
+    "Dessa inställningar kräver inloggning och visas bara för aktiva prenumeranter.":
+      "These settings require login and are only shown to active subscribers.",
+    "Prenumerationen är avslutad": "Subscription cancelled",
+    "Du får inga fler notiser om världsarv. Tack för att du använde Heritage Connect.":
+      "You will no longer receive world heritage notifications. Thank you for using Heritage Connect.",
+    "Tillbaka till världsarvet": "Back to the world heritage site",
+    "Ca 71 km bort": "Approx. 71 km away",
+    "Ca 1.7 km bort": "Approx. 1.7 km away"
+  }
+};
+
 function getI18nDictionary(lang) {
   const target = (lang || "sv").toLowerCase().slice(0, 2);
-  return NEWSPAPER_I18N[target] || {};
+  return { ...(NEWSPAPER_I18N[target] || {}), ...(UI_MODAL_I18N[target] || {}) };
 }
 
 const I18N_SV = {
@@ -200,7 +299,7 @@ function getUnescoSiteName(site, lang) {
 /**
  * Beskrivning: UNESCO först (desc_xx), Google Translate backup från engelska.
  */
-async function resolveSiteDescription(site, targetLang = getNewspaperLang()) {
+async function resolveSiteDescription(site, targetLang = getActiveReaderLang()) {
   const target = (targetLang || "sv").toLowerCase().slice(0, 2);
 
   const unescoText = getUnescoDescription(site, target);
@@ -227,7 +326,7 @@ async function resolveSiteDescription(site, targetLang = getNewspaperLang()) {
 /**
  * Rubrik: UNESCO-officiellt namn (fältet name + name_xx), översatt från engelska vid behov.
  */
-async function resolveSiteName(site, targetLang = getNewspaperLang()) {
+async function resolveSiteName(site, targetLang = getActiveReaderLang()) {
   const target = (targetLang || "sv").toLowerCase().slice(0, 2);
 
   const localizedName = getUnescoSiteName(site, target);
@@ -253,6 +352,7 @@ const translateCache = new Map();
 /** Svenska källtexter per element – ändras aldrig efter första registreringen. */
 const i18nSourceRegistry = new WeakMap();
 let backendTranslateAvailable = true;
+let applyReaderLanguageSeq = 0;
 
 function registerI18nSource(el, sourceText) {
   if (!el || el.dataset.i18nDynamic === "true") return;
@@ -856,7 +956,7 @@ const currentSite = {
   language: NEWSPAPER_LANG
 };
 
-function resolveSiteNameSync(site, targetLang = getNewspaperLang()) {
+function resolveSiteNameSync(site, targetLang = getActiveReaderLang()) {
   const localizedName = getUnescoSiteName(site, targetLang);
   if (localizedName) return localizedName;
   return (site?.name || "").trim();
@@ -915,7 +1015,7 @@ function showGeoLoadingState() {
 
 async function refreshGeoUiSafeguard() {
   if (lastClosestSite) {
-    await refreshClosestSiteTextOnly(lastClosestSite, getNewspaperLang());
+    await refreshClosestSiteTextOnly(lastClosestSite, getActiveReaderLang());
     return;
   }
   if (LOCAL_HERITAGE_SITES.length > 0) {
@@ -1104,7 +1204,7 @@ async function applyClosestSiteToUi(site) {
     desc.dataset.i18nDynamic = displayDesc ? "true" : "";
   }
 
-  const lang = getNewspaperLang();
+  const lang = getActiveReaderLang();
   if (lang !== "sv") {
     await translateDistanceLabels(lang);
   }
@@ -1469,7 +1569,7 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
   return result;
 }
 
-async function setElementI18n(element, svText, lang = getNewspaperLang()) {
+async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
   if (!element) return;
   registerI18nSource(element, svText);
   delete element.dataset.i18nDynamic;
@@ -1561,18 +1661,23 @@ async function translateViaApi(text, targetLang, sourceLang = "sv") {
 }
 
 function syncReaderLanguageUi(lang) {
-  const target = (lang || "sv").toLowerCase().slice(0, 2);
-
+  const target = normalizeLanguageCode(lang || "sv");
   const label = document.getElementById("heritageLangLabel");
   if (label) {
-    label.textContent = READER_LANG_LABELS[target] || target.toUpperCase();
+    label.textContent = getLanguageDisplayName(target);
   }
 }
 
 async function changeDemoLanguage(lang) {
-  const target = (lang || "sv").toLowerCase().slice(0, 2);
+  const target = normalizeLanguageCode(lang || "sv");
+  if (!isValidLanguageCode(target)) {
+    toast("Ogiltig språkkod – använd två bokstäver (ISO 639-1), t.ex. ja, hi, uk.");
+    return;
+  }
+  syncDemoLanguageSelectToLang(target);
   document.documentElement.lang = target;
   await applyReaderLanguage(target);
+  if (getActiveReaderLang() !== target) return;
   await refreshGeoUiSafeguard();
 }
 
@@ -1580,8 +1685,11 @@ function initDemoLanguageSelect() {
   const select = document.getElementById("demoLanguageSelect");
   if (!select) return;
 
-  select.value = getNewspaperLang();
+  rebuildLanguageSelect(select, getNewspaperLang());
+  syncDemoLanguageSelectToLang(getNewspaperLang());
+
   select.addEventListener("change", () => {
+    if (!select.value) return;
     changeDemoLanguage(select.value).catch(error => {
       console.error("Språkbyte misslyckades:", error);
     });
@@ -1600,66 +1708,133 @@ function initGeoDemoControls() {
   });
 }
 
+function buildTranslationMapSync(uniqueSources, target, source = "sv") {
+  const map = {};
+  const pending = [];
+
+  if (target === source) {
+    for (const text of uniqueSources) {
+      map[text] = text;
+    }
+    return { map, pending };
+  }
+
+  for (const text of uniqueSources) {
+    if (!text?.trim()) {
+      map[text] = text;
+      continue;
+    }
+    const cacheKey = `${source}|${target}|${text}`;
+    if (translateCache.has(cacheKey)) {
+      map[text] = translateCache.get(cacheKey);
+      continue;
+    }
+    const offline = resolveI18nText(text, target);
+    if (offline) {
+      translateCache.set(cacheKey, offline);
+      map[text] = offline;
+      continue;
+    }
+    pending.push(text);
+  }
+
+  return { map, pending };
+}
+
+function isActiveReaderLanguageTarget(target) {
+  return getActiveReaderLang() === normalizeLanguageCode(target);
+}
+
+function applyTranslationMapToElements(elements, translatedMap) {
+  elements.forEach(el => {
+    if (el.dataset.i18nDynamic === "true") return;
+    const source = getI18nSource(el);
+    if (Object.prototype.hasOwnProperty.call(translatedMap, source)) {
+      el.textContent = translatedMap[source];
+    }
+  });
+}
+
+async function applyDynamicLanguageContent(target) {
+  updateTodayDate();
+  if (target === "sv") {
+    updateDistanceLabels();
+  } else {
+    updateDistanceLabels();
+    await translateDistanceLabels(target);
+  }
+  if (lastClosestSite) {
+    await refreshClosestSiteTextOnly(lastClosestSite, target);
+  }
+}
+
 async function applyReaderLanguage(lang) {
-  const target = (lang || getNewspaperLang()).toLowerCase().slice(0, 2);
+  const target = (lang || getActiveReaderLang()).toLowerCase().slice(0, 2);
+  const seq = ++applyReaderLanguageSeq;
   currentSite.language = target;
+  document.documentElement.lang = target;
   captureI18nSources();
   syncReaderLanguageUi(target);
   document.documentElement.dir = RTL_LANGS.has(target) ? "rtl" : "ltr";
   document.body.classList.toggle("is-translating", target !== "sv");
 
   try {
+    await applyDynamicLanguageContent(target);
+    if (!isActiveReaderLanguageTarget(target)) return;
+
     const elements = Array.from(document.querySelectorAll("[data-i18n]"))
       .filter(el => el.dataset.i18nDynamic !== "true");
 
-    const sources = elements.map(el => getI18nSource(el)).filter(Boolean);
-    const uniqueSources = [...new Set(sources)];
-    const translatedMap = target === "sv"
-      ? Object.fromEntries(uniqueSources.map(text => [text, text]))
-      : await translateBatchMap(uniqueSources, target, "sv");
-
-    elements.forEach(el => {
-      if (el.dataset.i18nDynamic === "true") return;
-      const source = getI18nSource(el);
-      el.textContent = translatedMap[source] || source;
-    });
+    const uniqueSources = [...new Set(elements.map(el => getI18nSource(el)).filter(Boolean))];
+    const { map: translatedMap, pending } = buildTranslationMapSync(uniqueSources, target, "sv");
+    applyTranslationMapToElements(elements, translatedMap);
 
     const placeholderEls = document.querySelectorAll("[data-i18n-placeholder]");
     const placeholderSources = [...new Set(
       Array.from(placeholderEls).map(el => el.dataset.i18nPlaceholderSource || el.getAttribute("placeholder") || "")
     )].filter(Boolean);
-    const placeholderMap = target === "sv"
-      ? Object.fromEntries(placeholderSources.map(text => [text, text]))
-      : await translateBatchMap(placeholderSources, target, "sv");
+    const { map: placeholderMap, pending: pendingPlaceholders } =
+      buildTranslationMapSync(placeholderSources, target, "sv");
 
     placeholderEls.forEach(el => {
       const source = el.dataset.i18nPlaceholderSource || el.getAttribute("placeholder") || "";
-      el.setAttribute("placeholder", placeholderMap[source] || source);
+      if (Object.prototype.hasOwnProperty.call(placeholderMap, source)) {
+        el.setAttribute("placeholder", placeholderMap[source]);
+      }
     });
 
-    await updateModalProgressTitle(target);
-    updateTodayDate();
-
-    if (target === "sv") {
-      updateDistanceLabels();
-    } else {
-      updateDistanceLabels();
-      await translateDistanceLabels(target);
+    if (pending.length > 0 && isActiveReaderLanguageTarget(target)) {
+      const apiMap = await translateBatchMap(pending, target, "sv");
+      if (isActiveReaderLanguageTarget(target)) {
+        Object.assign(translatedMap, apiMap);
+        applyTranslationMapToElements(elements, translatedMap);
+      }
     }
 
-    if (lastClosestSite) {
-      await refreshClosestSiteTextOnly(lastClosestSite, target);
-    } else {
-      await refreshGeoUiSafeguard();
+    if (pendingPlaceholders.length > 0 && isActiveReaderLanguageTarget(target)) {
+      const apiPlaceholders = await translateBatchMap(pendingPlaceholders, target, "sv");
+      if (isActiveReaderLanguageTarget(target)) {
+        Object.assign(placeholderMap, apiPlaceholders);
+        placeholderEls.forEach(el => {
+          const source = el.dataset.i18nPlaceholderSource || el.getAttribute("placeholder") || "";
+          el.setAttribute("placeholder", placeholderMap[source] || source);
+        });
+      }
+    }
+
+    if (isActiveReaderLanguageTarget(target)) {
+      await updateModalProgressTitle(target);
     }
   } catch (error) {
     console.error("Språkbyte misslyckades:", error);
   } finally {
-    document.body.classList.remove("is-translating");
+    if (isActiveReaderLanguageTarget(target) && seq === applyReaderLanguageSeq) {
+      document.body.classList.remove("is-translating");
+    }
   }
 }
 
-async function updateModalProgressTitle(targetLang = getNewspaperLang()) {
+async function updateModalProgressTitle(targetLang = getActiveReaderLang()) {
   const modalProgress = document.getElementById("modalProgress");
   const activeStep = document.querySelector(".modal-step.active");
   if (!modalProgress || !activeStep?.dataset.i18nTitle) return;
@@ -2704,19 +2879,23 @@ function updateTodayDate() {
   if (!dateElement) return;
 
   const today = new Date();
-  const lang = getNewspaperLang();
   const localeMap = {
-    sv: "sv-SE",
-    fi: "fi-FI",
-    ar: "ar-SA",
-    en: "en-GB",
-    de: "de-DE",
-    fr: "fr-FR",
-    es: "es-ES",
-    no: "nb-NO",
-    da: "da-DK",
+    sv: "sv-SE", fi: "fi-FI", ar: "ar-SA", en: "en-GB", de: "de-DE",
+    fr: "fr-FR", es: "es-ES", no: "nb-NO", nb: "nb-NO", nn: "nb-NO",
+    da: "da-DK", ja: "ja-JP", ko: "ko-KR", pt: "pt-PT", it: "it-IT",
+    nl: "nl-NL", pl: "pl-PL", ru: "ru-RU", zh: "zh-CN", hi: "hi-IN",
+    tr: "tr-TR", uk: "uk-UA", vi: "vi-VN", th: "th-TH", el: "el-GR",
+    he: "he-IL", cs: "cs-CZ", hu: "hu-HU", ro: "ro-RO", id: "id-ID"
   };
-  const locale = localeMap[lang] || lang;
+  const lang = normalizeLanguageCode(getActiveReaderLang());
+  let locale = localeMap[lang];
+  if (!locale) {
+    try {
+      locale = Intl.getCanonicalLocales(lang)[0] || lang;
+    } catch (_) {
+      locale = lang;
+    }
+  }
 
   const formattedDate = today.toLocaleDateString(locale, {
     weekday: "long",
@@ -2757,10 +2936,12 @@ async function bootstrapApp() {
 
   void loadConfig();
   captureI18nSources();
-  try {
-    await applyReaderLanguage(getNewspaperLang());
-  } finally {
-    await refreshGeoUiSafeguard();
+  await refreshGeoUiSafeguard();
+  const finalLang = getActiveReaderLang();
+  if (finalLang !== "sv") {
+    await applyReaderLanguage(finalLang);
+  } else {
+    syncReaderLanguageUi("sv");
   }
 }
 
