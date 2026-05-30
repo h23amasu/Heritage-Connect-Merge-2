@@ -2224,6 +2224,15 @@ async function updatePaymentProviderUi() {
   }
 }
 
+function isDemoWebapp() {
+  const path = window.location.pathname || "";
+  return path.includes("/demo") || path.endsWith("/index.html") || path === "/";
+}
+
+function shouldSimulateTravelForGeofencing() {
+  return isDemoWebapp() || geoState.source === "test" || geoState.source === "url";
+}
+
 function normalizePhoneForApi(phone) {
   let value = String(phone || "").trim().replace(/[\s-]/g, "");
   if (!value) return "";
@@ -2247,11 +2256,36 @@ function buildPreferencesPayload(extra = {}) {
 }
 
 function getLocationReportPhone() {
-  const phone = normalizePhoneForApi(prototypeState.phone || "");
+  let phone = normalizePhoneForApi(prototypeState.phone || "");
+  if ((!phone || isPlaceholderContact(phone)) && prototypeState.user_id) {
+    const fromUserId = normalizePhoneForApi(prototypeState.user_id);
+    if (fromUserId.startsWith("+") && fromUserId.length >= 10) {
+      phone = fromUserId;
+    }
+  }
   if (!phone || isPlaceholderContact(phone) || phone === "bankid-user") {
     return null;
   }
   return phone;
+}
+
+function describeGeofencingSkipReason(reason) {
+  switch (reason) {
+    case "already_notified":
+      return "Du har redan fått SMS om denna plats – välj t.ex. Engelsberg i Demo-plats.";
+    case "in_commute_zone":
+      return "Du är i hemzonen – byt Demo-plats till Falun eller Engelsberg.";
+    case "home_registered":
+      return "Hemposition registrerad – byt Demo-plats för att trigga världsarv-SMS.";
+    case "no_nearby_site":
+      return "Inget världsarv inom 30 km – välj Falun i Demo-plats.";
+    case "no_active_subscription":
+      return "Prenumerationen är inte aktiv – betala klart först.";
+    case "sms_delivery_failed":
+      return "SMS kunde inte skickas – kontrollera HelloSMS-inställningarna.";
+    default:
+      return null;
+  }
 }
 
 async function reportLocationToApi() {
@@ -2263,7 +2297,7 @@ async function reportLocationToApi() {
     phoneNo: phone,
     latitude: geoState.latitude,
     longitude: geoState.longitude,
-    simulate_travel: geoState.source === "test",
+    simulate_travel: shouldSimulateTravelForGeofencing(),
   };
 
   try {
@@ -2286,7 +2320,7 @@ async function reportLocationToApi() {
         }
       }
     } else if (data.reason === "sms_delivery_failed") {
-      toast("SMS kunde inte skickas – kontrollera HelloSMS-inställningarna.");
+      toast(describeGeofencingSkipReason(data.reason));
     } else if (data.reason === "cooldown") {
       console.debug("Geofencing-SMS väntar på cooldown – försöker igen om 65 sekunder.");
       window.setTimeout(() => {
@@ -2294,14 +2328,13 @@ async function reportLocationToApi() {
           void reportLocationToApi();
         }
       }, 65000);
-    } else if (data.reason === "in_commute_zone") {
-      toast("Du är i hemzonen – byt demo-plats till t.ex. Falun för att testa världsarv-SMS.");
-    } else if (data.reason === "home_registered") {
-      console.debug("Hemposition registrerad.");
-    } else if (data.reason === "already_notified") {
-      console.debug("Redan notifierad om denna plats.");
-    } else if (data.reason === "no_nearby_site") {
-      console.debug("Inget världsarv inom 30 km.");
+    } else {
+      const hint = describeGeofencingSkipReason(data.reason);
+      if (hint) {
+        toast(hint);
+      } else if (data.reason) {
+        console.debug("location/update:", data.reason);
+      }
     }
   } catch (error) {
     console.debug("location/update:", error);
@@ -2730,6 +2763,9 @@ async function completeSubscriptionAfterPayment(paymentFields) {
   prototypeState.payment_provider = PAYMENT_CONFIG.stripe_enabled ? "stripe" : "mock";
   prototypeState.subscription_active = Boolean(data.subscription_active);
   prototypeState.user_id = data.user_id || prototypeState.user_id;
+  if (prototypeState.channel === "sms" && data.user_id) {
+    prototypeState.phone = normalizePhoneForApi(data.user_id);
+  }
   prototypeState.last_subscription = data;
 
   updateConfirmationMessage({
@@ -2742,6 +2778,11 @@ async function completeSubscriptionAfterPayment(paymentFields) {
 
   startLocationReporting();
   sendConfirmationNotificationPayload();
+  window.setTimeout(() => {
+    if (prototypeState.subscription_active) {
+      void reportLocationToApi();
+    }
+  }, 2500);
   return true;
 }
 

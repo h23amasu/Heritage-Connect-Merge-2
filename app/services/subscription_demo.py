@@ -13,7 +13,7 @@ from app.schemas import (
     SubscriptionPauseRequest,
 )
 from app.services.auth_service import normalize_phone
-from app.services.geofencing_demo import _demo_users
+from app.services.geofencing_demo import _demo_users, reset_demo_geofencing_user
 from app.services.receipt_service import send_subscription_receipt
 from app.services.payment_service import process_payment
 
@@ -45,6 +45,7 @@ def create_demo_subscription(
     start = date.today()
     end = start + timedelta(days=body.duration_days or 30)
     user_id = user_key
+    reset_demo_geofencing_user(user_key)
 
     _demo_users.setdefault(
         user_key,

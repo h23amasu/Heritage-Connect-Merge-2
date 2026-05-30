@@ -89,3 +89,15 @@ def test_mark_visited_blocks_repeat_notification():
     blocked = process_location_demo(phone, FALUN[0], FALUN[1])
     assert blocked["notified"] is False
     assert blocked["reason"] == "already_notified"
+
+
+def test_reset_demo_geofencing_user_allows_resubscribe_sms():
+    from app.services.geofencing_demo import reset_demo_geofencing_user
+
+    phone = "+46708887766"
+    first = process_location_demo(phone, FALUN[0], FALUN[1], simulate_travel=True)
+    assert first["notified"] is True
+
+    reset_demo_geofencing_user(phone)
+    again = process_location_demo(phone, FALUN[0], FALUN[1], simulate_travel=True)
+    assert again["notified"] is True

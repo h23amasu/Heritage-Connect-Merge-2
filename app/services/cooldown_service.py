@@ -57,5 +57,13 @@ class CooldownService:
         with self._lock:
             self._last_sent.clear()
 
+    def clear_geo_for_recipient(self, to: str) -> None:
+        """Rensa geofencing-cooldown vid ny demo-prenumeration."""
+        prefix = f"geo:{to}:"
+        with self._lock:
+            for key in list(self._last_sent):
+                if key.startswith(prefix):
+                    del self._last_sent[key]
+
 
 cooldown_service = CooldownService()

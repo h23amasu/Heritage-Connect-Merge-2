@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     # Payment settings
     PAYMENT_PROVIDER: str = "mock"  # mock or stripe
-    # I demo-läge: mock-betalning i UI (kortnummer 4242…) så klassen kan testa utan Stripe
-    PAYMENT_DEMO_USE_MOCK: bool = True
+    # true = enkel mock-betalning i UI trots Stripe-nycklar (sätt false för Stripe checkout)
+    PAYMENT_DEMO_USE_MOCK: bool = False
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
 

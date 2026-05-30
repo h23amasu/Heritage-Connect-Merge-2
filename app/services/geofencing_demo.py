@@ -50,6 +50,18 @@ def _demo_user_key(phone_number: str) -> str:
     return normalize_phone(phone_number)
 
 
+def reset_demo_geofencing_user(user_key: str) -> None:
+    """Nollställ hem/notifieringar vid ny demo-prenumeration (för omtest)."""
+    normalized = _demo_user_key(user_key)
+    user = _demo_users.get(normalized)
+    if user:
+        user["home_lat"] = None
+        user["home_lng"] = None
+    stale = {(key, site_id) for key, site_id in _demo_notified if key == normalized}
+    _demo_notified.difference_update(stale)
+    cooldown_service.clear_geo_for_recipient(normalized)
+
+
 def _ensure_demo_user(phone_number: str) -> dict[str, Any]:
     key = _demo_user_key(phone_number)
     if key not in _demo_users:

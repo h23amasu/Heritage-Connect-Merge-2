@@ -24,13 +24,11 @@ SMTP_FROM=er@gmail.com
 SMTP_USE_TLS=true
 SMTP_USE_SSL=false
 
-# Betalning – mock i demo (klassen kan betala med 4242… utan Stripe-problem)
-PAYMENT_PROVIDER=mock
-PAYMENT_DEMO_USE_MOCK=true
-# Valfritt Stripe test (sätt PAYMENT_DEMO_USE_MOCK=false om ni vill tvinga Stripe i UI)
-# PAYMENT_PROVIDER=stripe
-# STRIPE_SECRET_KEY=sk_test_...
-# STRIPE_PUBLISHABLE_KEY=pk_test_...
+# Betalning – Stripe test (4242 4242 4242 4242). Byt till sk_live_… för skarpt.
+PAYMENT_PROVIDER=stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+# PAYMENT_DEMO_USE_MOCK=true  # endast om ni vill hoppa över Stripe och bara mocka 4242-fält
 
 # BankID – sätt bankid för riktig test (cert auto i testmiljö), se docs/BANKID.md
 BANKID_PROVIDER=mock
