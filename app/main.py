@@ -56,6 +56,7 @@ from app.routers import (
     auth,
     user_preferences,
     subscription_flow,
+    integration,
 )
 
 
@@ -106,6 +107,7 @@ app.include_router(unesco.router)
 app.include_router(auth.router)
 app.include_router(user_preferences.router)
 app.include_router(subscription_flow.router)
+app.include_router(integration.router)
 
 
 @app.get("/", tags=["Root"])

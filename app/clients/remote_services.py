@@ -79,3 +79,18 @@ def send_notification(request: NotificationRequest) -> dict[str, Any]:
     except Exception:
         logger.exception("Meddelande-API svarade inte (%s)", base)
         return {"success": False, "error": "notification_unreachable"}
+
+
+def deliver_notification_message(request: NotificationRequest) -> bool:
+    """
+    Levererar meddelande utan extra cooldown (anroparen hanterar det).
+    Använder annan grupps API om NOTIFICATION_SERVICE_URL är satt.
+    """
+    base = _service_root(settings.NOTIFICATION_SERVICE_URL)
+    if base:
+        result = send_notification(request)
+        return bool(result.get("success"))
+
+    from app.services.notification_service import dispatch_notification
+
+    return dispatch_notification(request)

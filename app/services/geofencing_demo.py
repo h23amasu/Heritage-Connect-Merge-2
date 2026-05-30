@@ -10,9 +10,7 @@ from app.services.auth_service import normalize_phone
 from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site
 from app.services.message_builder import build_near_site_sms
-from app.services.notification_service import (
-    dispatch_notification,
-)
+from app.clients.remote_services import deliver_notification_message
 from app.services.cooldown_service import cooldown_service
 from app.schemas import NotificationRequest
 
@@ -138,11 +136,13 @@ def process_location_demo(
 
     unesco_id = str(nearest.get("unesco_id") or nearest.get("id") or "")
     site_name = nearest.get("name") or "UNESCO-världsarv"
+    lang = user.get("preferred_language") or "sv"
+    localized_name = nearest.get(f"name_{lang[:2]}") or nearest.get("name_sv")
 
     result["nearest_site"] = {
         "id": unesco_id,
         "unesco_id": unesco_id,
-        "name": site_name,
+        "name": localized_name or site_name,
         "distance_km": round(nearest_dist_km, 2),
     }
 
@@ -151,11 +151,16 @@ def process_location_demo(
         result["reason"] = "already_notified"
         return result
 
-    lang = user.get("preferred_language") or "sv"
     notification = NotificationRequest(
         type="sms",
         to=user_key,
-        message=build_near_site_sms(site_name, unesco_id, lang, unesco_id=unesco_id),
+        message=build_near_site_sms(
+            site_name,
+            unesco_id,
+            lang,
+            unesco_id=unesco_id,
+            localized_name=localized_name,
+        ),
         user_id=user_key,
         site_id=unesco_id,
     )
@@ -164,7 +169,7 @@ def process_location_demo(
         result["reason"] = "cooldown"
         return result
 
-    if not dispatch_notification(notification):
+    if not deliver_notification_message(notification):
         result["reason"] = "sms_delivery_failed"
         return result
 

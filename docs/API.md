@@ -19,6 +19,10 @@ Bas-URL (lokal): `http://localhost:8000`
 
 Leverantör (HelloSMS, SMTP) exponeras aldrig i svaret.
 
+**SMS-länkar:** Sätt `SITE_BASE_URL` till er publika app-URL (t.ex. Railway). Länken i SMS blir `{SITE_BASE_URL}/sites/{unesco_id}`.
+
+**Byta meddelandetjänst med annan grupp:** Sätt `NOTIFICATION_SERVICE_URL` till deras bas-URL. Geofencing och övriga flöden anropar då `POST {NOTIFICATION_SERVICE_URL}/notification/send-notification` med samma JSON som ovan. Se `GET /api/integration/config` för aktuella URL:er.
+
 **E-post:** Standard `EMAIL_PROVIDER=mock` loggar bara i servern – inget riktigt mail trots `success`. För leverans till inkorg: konfigurera SMTP/SendGrid i `.env` ([docs/EMAIL.md](EMAIL.md)).
 
 ---

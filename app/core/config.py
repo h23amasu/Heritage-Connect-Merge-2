@@ -1,6 +1,7 @@
 """
 Project settings - reads from environment variables or the .env file
 """
+import os
 from typing import Any
 
 from pydantic import model_validator
@@ -114,6 +115,25 @@ class Settings(BaseSettings):
                 cleaned["HELLOSMS_SENDER"] = cleaned["HELLOSMS_FROM"]
             return cleaned
         return data
+
+    @model_validator(mode="after")
+    def apply_runtime_defaults(self) -> "Settings":
+        """Fyll i SITE_BASE_URL på Railway om placeholder används (SMS-länkar)."""
+        base = (self.SITE_BASE_URL or "").strip().rstrip("/")
+        placeholder_markers = (
+            "heritage-connect.example",
+            "your-app.up.railway.app",
+            "example.com",
+        )
+        needs_url = not base or any(marker in base for marker in placeholder_markers)
+        if needs_url:
+            railway_static = os.environ.get("RAILWAY_STATIC_URL", "").strip().rstrip("/")
+            railway_host = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+            if railway_static:
+                object.__setattr__(self, "SITE_BASE_URL", railway_static)
+            elif railway_host:
+                object.__setattr__(self, "SITE_BASE_URL", f"https://{railway_host}")
+        return self
 
     class Config:
         env_file = ".env"

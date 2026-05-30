@@ -34,8 +34,11 @@ STRIPE_PUBLISHABLE_KEY=pk_test_...
 BANKID_PROVIDER=mock
 BANKID_TEST_SERVER=true
 
-# Länkar i SMS (sätt till er Railway-URL efter deploy, t.ex. https://xxx.up.railway.app)
-SITE_BASE_URL=https://your-app.up.railway.app
+# Länkar i SMS (sätt till er Railway-URL – annars fylls RAILWAY_PUBLIC_DOMAIN i automatiskt)
+SITE_BASE_URL=https://web-production-e43d0.up.railway.app
+
+# Byt meddelandetjänst till annan grupp (valfritt – tom = er egen HelloSMS)
+# NOTIFICATION_SERVICE_URL=https://annan-grupp.example.com
 
 # Övrigt (valfritt)
 DEFAULT_HOME_RADIUS_KM=0.1
