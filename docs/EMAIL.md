@@ -37,6 +37,22 @@ Railway **Hobby/Free blockerar utgående SMTP** (port 587/465). Gmail SMTP funge
 
 **Lösning:** använd en e-posttjänst med HTTPS API i Railway-miljövariabler:
 
+### SMTP2GO (bra för Railway)
+
+1. Skapa konto på [smtp2go.com](https://www.smtp2go.com) → **Sending → API Keys**.
+2. Verifiera avsändare under **Sending → Verified Senders** (domän eller enskild e-post).
+3. Sätt i Railway → Variables:
+
+```env
+EMAIL_PROVIDER=smtp2go
+SMTP2GO_API_KEY=api-...
+SMTP2GO_FROM=din@verifierade-adress.se
+```
+
+Använd **API** (ovan), inte SMTP-relay (`mail.smtp2go.com:587`) – SMTP blockeras på Railway Hobby.
+
+Gratisnivå: ca 1 000 mail/månad (räcker för demo/kurs).
+
 ### Resend (enklast)
 
 1. Skapa konto på [resend.com](https://resend.com) och API-nyckel.

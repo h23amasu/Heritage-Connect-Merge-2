@@ -36,7 +36,7 @@ def integration_config():
         "email_uses_https_api": email_uses_https_api(),
         "email_railway_smtp_note": (
             "Railway Hobby/Free blockerar utgående SMTP (port 587). "
-            "Använd EMAIL_PROVIDER=resend eller sendgrid med HTTPS API i produktion."
+            "Använd EMAIL_PROVIDER=smtp2go, resend eller sendgrid med HTTPS API i produktion."
             if email_provider_name() == "smtp"
             else None
         ),

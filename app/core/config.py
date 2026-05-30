@@ -65,8 +65,8 @@ class Settings(BaseSettings):
 
     # E-post (notification API channel=email)
     # mock = loggar bara (API svarar success men inget mail i inkorgen)
-    # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP | resend = Resend HTTP (Railway Hobby)
-    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid | resend
+    # smtp = Gmail m.fl. | sendgrid | resend | smtp2go (HTTPS API för Railway)
+    EMAIL_PROVIDER: str = "mock"  # mock | smtp | sendgrid | resend | smtp2go
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     SENDGRID_FROM: str = ""  # valfritt, annars SMTP_FROM
     RESEND_API_KEY: str = ""
     RESEND_FROM: str = ""  # valfritt, annars SMTP_FROM
+    SMTP2GO_API_KEY: str = ""
+    SMTP2GO_FROM: str = ""  # valfritt, annars SMTP_FROM
 
     # API-nyckel för testmiljö (valfri – frontend skickar Bearer)
     API_BEARER_TOKEN: str = ""

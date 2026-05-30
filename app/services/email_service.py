@@ -155,6 +155,51 @@ class ResendEmailProvider(EmailProviderInterface):
         }
 
 
+class Smtp2GoEmailProvider(EmailProviderInterface):
+    def send(self, to: str, subject: str, message: str) -> dict:
+        api_key = (settings.SMTP2GO_API_KEY or "").strip()
+        if not api_key:
+            raise EmailDeliveryError("SMTP2GO_API_KEY saknas i .env")
+
+        from_email = settings.SMTP2GO_FROM or settings.SMTP_FROM
+        payload = {
+            "sender": from_email,
+            "to": [to],
+            "subject": subject or settings.SMTP_DEFAULT_SUBJECT,
+            "text_body": message,
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.smtp2go.com/v3/email/send",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Smtp2go-Api-Key": api_key,
+                },
+                json=payload,
+                timeout=30.0,
+            )
+            if response.status_code != 200:
+                raise EmailDeliveryError(
+                    f"SMTP2GO svarade {response.status_code}: {response.text[:300]}"
+                )
+            data = response.json()
+            email_data = data.get("data") or {}
+            if email_data.get("failed"):
+                raise EmailDeliveryError(
+                    f"SMTP2GO kunde inte skicka: {email_data.get('failures') or data}"
+                )
+        except httpx.HTTPError as exc:
+            raise EmailDeliveryError(f"SMTP2GO-nätverksfel: {exc}") from exc
+
+        message_id = email_data.get("email_id") or data.get("request_id") or f"smtp2go_{uuid.uuid4().hex[:12]}"
+        return {
+            "status": "sent",
+            "message_id": message_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+
 def _resolve_provider() -> EmailProviderInterface:
     provider = (settings.EMAIL_PROVIDER or "mock").lower().strip()
 
@@ -162,6 +207,8 @@ def _resolve_provider() -> EmailProviderInterface:
         return SendGridEmailProvider()
     if provider == "resend":
         return ResendEmailProvider()
+    if provider == "smtp2go":
+        return Smtp2GoEmailProvider()
     if provider == "smtp" and settings.SMTP_HOST:
         return SmtpEmailProvider()
     if provider == "smtp" and not settings.SMTP_HOST:
@@ -179,6 +226,8 @@ def email_delivery_configured() -> bool:
         return bool((settings.SENDGRID_API_KEY or "").strip())
     if provider == "resend":
         return bool((settings.RESEND_API_KEY or "").strip())
+    if provider == "smtp2go":
+        return bool((settings.SMTP2GO_API_KEY or "").strip())
     if provider == "smtp":
         return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
     return False
@@ -189,4 +238,4 @@ def email_provider_name() -> str:
 
 
 def email_uses_https_api() -> bool:
-    return email_provider_name() in {"sendgrid", "resend"}
+    return email_provider_name() in {"sendgrid", "resend", "smtp2go"}
