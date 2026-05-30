@@ -14,6 +14,14 @@ def stripe_configured() -> bool:
     return provider == "stripe" and bool(settings.STRIPE_SECRET_KEY)
 
 
+def mock_payment_allowed() -> bool:
+    """Demo/testkort (4242…) när Stripe inte ska användas i checkout."""
+    provider = (settings.PAYMENT_PROVIDER or "mock").lower()
+    if provider != "stripe" or not settings.STRIPE_SECRET_KEY:
+        return True
+    return settings.GEOFENCING_DEMO_MODE and settings.PAYMENT_DEMO_USE_MOCK
+
+
 def create_stripe_payment_intent(
     amount: Decimal,
     metadata: Optional[dict] = None,
@@ -73,7 +81,7 @@ def process_payment(
     if card_type not in ("mastercard", "visa"):
         return False, ""
 
-    if stripe_configured():
+    if stripe_configured() and not mock_payment_allowed():
         return False, ""
 
     print(f"[MOCK PAYMENT] {amount} SEK, {card_type}")
