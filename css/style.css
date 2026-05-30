@@ -237,6 +237,49 @@
       color: #475569;
     }
 
+    .translation-loader {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #475569;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .translation-loader[hidden] {
+      display: none !important;
+    }
+
+    .translation-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #cbd5e1;
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: translation-spin 0.75s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes translation-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    body.is-translating .news-site {
+      position: relative;
+    }
+
+    body.is-translating .news-site::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.4);
+      pointer-events: none;
+      z-index: 4;
+      border-radius: inherit;
+    }
+
     .demo-geo-bar select {
       flex: 1;
       min-width: 180px;

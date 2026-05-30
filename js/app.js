@@ -70,7 +70,8 @@ const NEWSPAPER_I18N = {
     "Nya tåglinjer väntas underlätta sommarens resande.": "New rail lines are expected to make summer travel easier.",
     "Flera museer förlänger öppettiderna inför högsäsongen.": "Several museums are extending opening hours ahead of the peak season.",
     "Guidade visningar lockar fler besökare till historiska miljöer.": "Guided tours are attracting more visitors to historic environments.",
-    "Prenumerera och få SMS om världsarv nära dig": "Subscribe and get SMS about world heritage near you"
+    "Prenumerera och få SMS om världsarv nära dig": "Subscribe and get SMS about world heritage near you",
+    "Översätter tidning och annons…": "Translating newspaper and ad…"
   },
   ar: {
     "Digital upplaga": "طبعة رقمية",
@@ -1784,6 +1785,18 @@ async function applyDynamicLanguageContent(target) {
   }
 }
 
+function setTranslationLoading(active) {
+  document.body.classList.toggle("is-translating", active);
+  const loader = document.getElementById("translationLoader");
+  if (!loader) return;
+  loader.hidden = !active;
+  loader.setAttribute("aria-hidden", active ? "false" : "true");
+}
+
+function isTermsAccepted() {
+  return document.getElementById("termsAccepted")?.checked === true;
+}
+
 async function applyReaderLanguage(lang) {
   const target = (lang || getActiveReaderLang()).toLowerCase().slice(0, 2);
   const seq = ++applyReaderLanguageSeq;
@@ -1792,7 +1805,7 @@ async function applyReaderLanguage(lang) {
   captureI18nSources();
   syncReaderLanguageUi(target);
   document.documentElement.dir = RTL_LANGS.has(target) ? "rtl" : "ltr";
-  document.body.classList.toggle("is-translating", target !== "sv");
+  setTranslationLoading(true);
 
   try {
     await applyDynamicLanguageContent(target);
@@ -1845,7 +1858,7 @@ async function applyReaderLanguage(lang) {
     console.error("Språkbyte misslyckades:", error);
   } finally {
     if (isActiveReaderLanguageTarget(target) && seq === applyReaderLanguageSeq) {
-      document.body.classList.remove("is-translating");
+      setTranslationLoading(false);
     }
   }
 }
@@ -2132,6 +2145,11 @@ function logApiPayload(label, endpoint, payload) {
 }
 
 function createSubscriptionDraft() {
+  if (!isTermsAccepted()) {
+    toast("Du måste godkänna villkoren och integritetspolicyn.");
+    return;
+  }
+
   const contactValue = getContactValue();
   const channelChoice = getSelectedChoice("subscribeChannel");
 
@@ -2429,6 +2447,12 @@ function sendConfirmationNotificationPayload() {
 }
 
 async function paymentComplete() {
+  if (!isTermsAccepted()) {
+    toast("Du måste godkänna villkoren och integritetspolicyn.");
+    openModalStep("subscribe");
+    return;
+  }
+
   const cardTypeChoice = getSelectedChoice("paymentCardType");
   const cardType = cardTypeChoice?.includes("master") ? "mastercard" : "visa";
   const cardNumber = (

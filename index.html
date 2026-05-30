@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=46" />
+  <link rel="stylesheet" href="css/style.css?v=48" />
 </head>
 <body>
   <div class="app-shell">
@@ -68,6 +68,10 @@
             <select id="demoLanguageSelect" aria-label="Välj tidningsspråk (ISO 639-1)">
               <option value="sv">Svenska (sv)</option>
             </select>
+            <span class="translation-loader" id="translationLoader" hidden aria-hidden="true" aria-live="polite">
+              <span class="translation-spinner" aria-hidden="true"></span>
+              <span data-i18n>Översätter tidning och annons…</span>
+            </span>
           </div>
           <header class="news-masthead">
             <div class="news-topline">
@@ -225,7 +229,7 @@
                 <p class="small-muted" data-i18n>Betalning i nästa steg via Stripe (Visa/Mastercard). Kort sparas inte i Heritage Connect.</p>
 
                 <label class="checkbox-line">
-                  <input type="checkbox" checked aria-label="Godkänn villkor och integritetspolicy" />
+                  <input type="checkbox" id="termsAccepted" aria-label="Godkänn villkor och integritetspolicy" />
                   <span data-i18n>Jag godkänner villkoren och</span>
                   <button type="button" class="link-btn" data-i18n onclick="togglePolicy(event)">integritetspolicyn</button>
                 </label>
@@ -393,6 +397,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=77"></script>
+  <script src="js/app.js?v=78"></script>
 </body>
 </html>
