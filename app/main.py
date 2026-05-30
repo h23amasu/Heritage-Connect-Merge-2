@@ -75,7 +75,7 @@ app = FastAPI(
     - Översättningstjänst
     - UNESCO-data (cache/sync)
     - Geoposition, geofencing, närmaste världsarv
-    - Autentisering (SMS-kod, BankID mock)
+    - Autentisering (SMS-kod, BankID)
     - Prenumeration & betalning (Mastercard/Visa, ingen auto-förnyelse)
     - AI-frågesvar (endast lokala PDF/txt)
     - Tidningsanpassning

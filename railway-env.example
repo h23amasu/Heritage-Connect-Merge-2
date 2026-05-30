@@ -24,6 +24,24 @@ SMTP_FROM=er@gmail.com
 SMTP_USE_TLS=true
 SMTP_USE_SSL=false
 
+# Betalning – Stripe test
+PAYMENT_PROVIDER=stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+
+# BankID – sätt bankid för riktig test (cert auto i testmiljö), se docs/BANKID.md
+BANKID_PROVIDER=mock
+BANKID_TEST_SERVER=true
+
+# Betalning – Stripe test
+PAYMENT_PROVIDER=stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+
+# BankID – sätt bankid för riktig test (cert auto i testmiljö), se docs/BANKID.md
+BANKID_PROVIDER=mock
+BANKID_TEST_SERVER=true
+
 # Länkar i SMS (sätt till er Railway-URL efter deploy, t.ex. https://xxx.up.railway.app)
 SITE_BASE_URL=https://your-app.up.railway.app
 

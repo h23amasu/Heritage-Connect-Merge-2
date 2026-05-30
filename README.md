@@ -90,7 +90,7 @@ Sätt `GEOFENCING_DEMO_MODE=false` i `.env` om du vill köra mot PostgreSQL.
 | **Närmaste världsarv (backend)** | `GET /api/sites/closest?lat=&lng=` |
 | **Plats / geofencing** | `POST /api/location/update` |
 | **Auth SMS** | `POST /api/auth/request-code`, `POST /api/auth/verify-code` |
-| **BankID (mock)** | `POST /api/auth/bankid/start`, `POST /api/auth/bankid/complete` |
+| **BankID** | `POST /api/auth/bankid/start`, `POST /api/auth/bankid/collect` – se [docs/BANKID.md](docs/BANKID.md) |
 | **Prenumeration** | `POST /api/subscription/create`, `POST /api/subscription/pause`, `POST /api/subscription/cancel` |
 | **Betalning** | `POST /api/payments/` |
 | **AI (lokala PDF)** | `POST /api/ai/ask` |

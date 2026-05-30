@@ -12,6 +12,32 @@ def setup_function():
     _email_otp_store.clear()
 
 
+def test_bankid_mock_flow():
+    start = client.post("/api/auth/bankid/start")
+    assert start.status_code == 200
+    payload = start.json()
+    assert payload["success"] is True
+    assert payload.get("mock") is True
+    assert payload.get("order_ref")
+
+    collect = client.post(
+        "/api/auth/bankid/collect",
+        json={"order_ref": payload["order_ref"]},
+    )
+    assert collect.status_code == 200
+    data = collect.json()
+    assert data["status"] == "complete"
+    assert data.get("access_token")
+
+
+def test_bankid_config():
+    response = client.get("/api/auth/bankid/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "bankid_mock" in data
+
+
 def test_verify_code_with_dev_code():
     client.post(
         "/api/auth/request-code",

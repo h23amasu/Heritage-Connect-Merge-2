@@ -252,6 +252,20 @@ class BankIdCompleteRequest(BaseModel):
     order_ref: str
 
 
+class BankIdCollectRequest(BaseModel):
+    order_ref: str
+
+
+class BankIdCollectResponse(BaseModel):
+    status: str
+    hint_code: Optional[str] = None
+    access_token: Optional[str] = None
+    user_id: Optional[str] = None
+    name: Optional[str] = None
+    error: Optional[str] = None
+    mock: Optional[bool] = None
+
+
 class AuthTokenResponse(BaseModel):
     success: bool = True
     access_token: str

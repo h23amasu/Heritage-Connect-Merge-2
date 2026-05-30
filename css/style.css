@@ -1314,6 +1314,34 @@
       background: #005a8e;
     }
 
+    .bankid-status-panel {
+      margin-top: 12px;
+      padding: 14px;
+      border: 1px solid #dbeafe;
+      border-radius: 10px;
+      background: #f8fbff;
+      text-align: center;
+    }
+
+    .bankid-qr-image {
+      display: block;
+      margin: 12px auto 0;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .bankid-launch-link {
+      display: inline-block;
+      margin-top: 10px;
+      color: #006ead;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .bankid-launch-link:hover {
+      text-decoration: underline;
+    }
+
     .toast {
       position: fixed;
       left: 50%;

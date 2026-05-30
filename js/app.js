@@ -511,6 +511,9 @@ function buildApiEndpoints(baseUrl) {
     loginRequestEmailCode: `${base}/api/auth/request-email-code`,
     loginVerifyEmailCode: `${base}/api/auth/verify-email-code`,
     bankidStart: `${base}/api/auth/bankid/start`,
+    bankidCollect: `${base}/api/auth/bankid/collect`,
+    bankidQr: `${base}/api/auth/bankid/qr`,
+    bankidConfig: `${base}/api/auth/bankid/config`,
     bankidComplete: `${base}/api/auth/bankid/complete`,
     updatePreferences: `${base}/api/user/preferences`,
     cancelSubscription: `${base}/api/subscription/cancel`,
@@ -2994,12 +2997,119 @@ function cancelSubscription() {
   if (confirmationMessage) confirmationMessage.style.display = "none";
 }
 
+function hideBankIdStatusPanel() {
+  const panel = document.getElementById("bankidStatusPanel");
+  const qrImage = document.getElementById("bankidQrImage");
+  const launchLink = document.getElementById("bankidLaunchLink");
+  if (panel) panel.setAttribute("hidden", "");
+  if (qrImage) qrImage.setAttribute("hidden", "");
+  if (launchLink) launchLink.setAttribute("hidden", "");
+}
+
+function showBankIdStatusPanel(message, { launchUrl = null, showQr = false } = {}) {
+  const panel = document.getElementById("bankidStatusPanel");
+  const statusText = document.getElementById("bankidStatusText");
+  const launchLink = document.getElementById("bankidLaunchLink");
+  const qrImage = document.getElementById("bankidQrImage");
+
+  if (statusText && message) {
+    statusText.textContent = message;
+  }
+  if (panel) panel.removeAttribute("hidden");
+
+  if (launchLink && launchUrl) {
+    launchLink.href = launchUrl;
+    launchLink.removeAttribute("hidden");
+  } else if (launchLink) {
+    launchLink.setAttribute("hidden", "");
+  }
+
+  if (qrImage) {
+    if (showQr) {
+      qrImage.removeAttribute("hidden");
+    } else {
+      qrImage.setAttribute("hidden", "");
+    }
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+async function pollBankIdCollect(orderRef, { maxAttempts = 90, intervalMs = 2000 } = {}) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetch(API_ENDPOINTS.bankidCollect, {
+      method: "POST",
+      headers: apiRequestHeaders(),
+      body: JSON.stringify({ order_ref: orderRef }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, data));
+    }
+
+    if (data.status === "complete") {
+      return data;
+    }
+    if (data.status === "failed") {
+      throw new Error(data.error || "BankID avbröts");
+    }
+
+    const statusText = document.getElementById("bankidStatusText");
+    if (statusText) {
+      const hint = data.hint_code ? ` (${data.hint_code})` : "";
+      statusText.textContent = `Väntar på BankID…${hint}`;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  throw new Error("BankID tog för lång tid – försök igen.");
+}
+
+async function refreshBankIdQr(orderRef) {
+  const qrImage = document.getElementById("bankidQrImage");
+  if (!qrImage) return;
+
+  const response = await fetch(
+    `${API_ENDPOINTS.bankidQr}?order_ref=${encodeURIComponent(orderRef)}`,
+    { headers: apiRequestHeaders() }
+  );
+  if (!response.ok) return;
+
+  const data = await response.json();
+  if (!data.qr_content) return;
+
+  qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.qr_content)}`;
+}
+
+function finishBankIdLogin(data) {
+  prototypeState.phone = "";
+  prototypeState.email = "";
+  prototypeState.channel = "sms";
+  prototypeState.user_id = data.user_id || "bankid_user";
+  prototypeState.access_token = data.access_token || null;
+  prototypeState.subscription_active = true;
+  hideBankIdStatusPanel();
+  updateConfirmationMessage();
+  syncSettingsChannelButtons();
+  openModalStep("confirmation");
+  startLocationReporting();
+  toast(data.name ? `Inloggad via BankID som ${data.name}.` : "Inloggad via BankID.");
+}
+
 async function loginWithBankId() {
   const btn = document.querySelector(".bankid-btn");
+  let qrTimer = null;
+
   if (btn) {
     btn.disabled = true;
     await setElementI18n(btn, I18N_SV.BANKID_WAIT);
   }
+
+  hideBankIdStatusPanel();
 
   try {
     const startRes = await fetch(API_ENDPOINTS.bankidStart, {
@@ -3009,38 +3119,42 @@ async function loginWithBankId() {
     const startData = await startRes.json();
 
     if (!startRes.ok) {
-      toast("BankID kunde inte startas.");
+      toast(startData.error || "BankID kunde inte startas.");
       return;
     }
 
-    await new Promise(r => setTimeout(r, 1500));
+    if (startData.mock) {
+      showBankIdStatusPanel("BankID demo – bekräftar automatiskt…");
+      await sleep(800);
+    } else {
+      showBankIdStatusPanel(
+        startData.message || "Öppna BankID-appen och godkänn inloggningen.",
+        {
+          launchUrl: startData.bankid_launch_url,
+          showQr: true,
+        }
+      );
 
-    const completeRes = await fetch(API_ENDPOINTS.bankidComplete, {
-      method: "POST",
-      headers: apiRequestHeaders(),
-      body: JSON.stringify({ order_ref: startData.order_ref }),
-    });
-    const data = await completeRes.json();
+      if (startData.bankid_launch_url) {
+        window.open(startData.bankid_launch_url, "_blank", "noopener,noreferrer");
+      }
 
-    if (!completeRes.ok) {
-      toast(`BankID-inloggning misslyckades: ${await readApiError(completeRes, data)}`);
-      return;
+      await refreshBankIdQr(startData.order_ref);
+      qrTimer = window.setInterval(() => {
+        refreshBankIdQr(startData.order_ref).catch(() => {});
+      }, 1000);
     }
 
-    prototypeState.phone = "+46701234567";
-    prototypeState.channel = "sms";
-    prototypeState.user_id = data.user_id || "bankid_user";
-    prototypeState.access_token = data.access_token || null;
-    prototypeState.subscription_active = true;
-    updateConfirmationMessage();
-    syncSettingsChannelButtons();
-    openModalStep("confirmation");
-    startLocationReporting();
-    toast("Inloggad via BankID.");
+    const result = await pollBankIdCollect(startData.order_ref);
+    finishBankIdLogin(result);
   } catch (error) {
     console.warn("BankID misslyckades:", error);
-    toast("Kunde inte nå BankID-API – kontrollera att servern körs.");
+    hideBankIdStatusPanel();
+    toast(error?.message || "BankID-inloggning misslyckades.");
   } finally {
+    if (qrTimer) {
+      clearInterval(qrTimer);
+    }
     if (btn) {
       btn.disabled = false;
       await setElementI18n(btn, I18N_SV.BANKID_BTN);

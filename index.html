@@ -254,6 +254,11 @@
                 <button type="button" class="full-width bankid-btn" data-i18n onclick="loginWithBankId()">
                   🏦 Logga in med BankID (Sverige)
                 </button>
+                <div id="bankidStatusPanel" class="bankid-status-panel" hidden>
+                  <p id="bankidStatusText" class="small-muted" data-i18n>Väntar på BankID…</p>
+                  <img id="bankidQrImage" class="bankid-qr-image" alt="BankID QR-kod" hidden width="180" height="180" />
+                  <a id="bankidLaunchLink" class="bankid-launch-link" href="#" target="_blank" rel="noopener noreferrer" hidden data-i18n>Öppna BankID-appen</a>
+                </div>
 
                 <div class="divider" data-i18n>eller via SMS-kod</div>
 

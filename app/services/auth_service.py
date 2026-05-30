@@ -1,5 +1,5 @@
 """
-Autentisering – SMS-engångskod och BankID (mock för utveckling).
+Autentisering – SMS-engångskod och BankID (mock eller riktig RP).
 """
 from __future__ import annotations
 
@@ -122,21 +122,41 @@ def verify_sms_code(phone: str, code: str) -> tuple[bool, Optional[str], Optiona
     return True, None, token
 
 
-def bankid_start() -> dict:
-    """Mock BankID – returnerar orderRef för demo."""
-    order_ref = secrets.token_hex(16)
-    return {
-        "success": True,
-        "method": "bankid",
-        "order_ref": order_ref,
-        "auto_complete_token": secrets.token_urlsafe(16),
-        "message": "BankID mock – anropa /api/auth/bankid/complete med order_ref",
-    }
-
-
-def bankid_complete(order_ref: str) -> tuple[bool, Optional[str], Optional[str]]:
-    if not order_ref:
-        return False, "invalid_order_ref", None
+def issue_bankid_session(user_key: str) -> str:
     token = secrets.token_urlsafe(24)
-    _session_store[token] = f"bankid:{order_ref[:8]}"
-    return True, None, token
+    _session_store[token] = f"bankid:{user_key}"
+    return token
+
+
+def bankid_start() -> dict:
+    """Legacy mock entry – använd bankid_service.start_auth med end_user_ip."""
+    from app.services.bankid_service import mock_start
+
+    return mock_start()
+
+
+def bankid_start_for_ip(end_user_ip: str) -> dict:
+    from app.services.bankid_service import start_auth
+
+    return start_auth(end_user_ip)
+
+
+def bankid_collect(order_ref: str) -> dict:
+    from app.services.bankid_service import collect_order
+
+    return collect_order(order_ref, issue_bankid_session)
+
+
+def bankid_qr_content(order_ref: str) -> Optional[str]:
+    from app.services.bankid_service import get_qr_content
+
+    return get_qr_content(order_ref)
+
+
+def bankid_complete(order_ref: str) -> tuple[bool, Optional[str], Optional[str], Optional[str]]:
+    result = bankid_collect(order_ref)
+    if result.get("status") == "complete":
+        return True, None, result.get("access_token"), result.get("user_id")
+    if result.get("status") == "pending":
+        return False, "pending", None, None
+    return False, result.get("error") or "bankid_failed", None, None

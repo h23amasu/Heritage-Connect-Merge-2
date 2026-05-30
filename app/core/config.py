@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
 
+    # BankID – mock (demo) eller bankid (riktig RP via pybankid)
+    BANKID_PROVIDER: str = "mock"  # mock | bankid
+    BANKID_TEST_SERVER: bool = True  # true = BankID testmiljö
+    BANKID_CERT_FILE: str = ""
+    BANKID_KEY_FILE: str = ""
+    BANKID_CERT_PEM: str = ""  # alternativ till fil – för Railway (hela PEM som env)
+    BANKID_KEY_PEM: str = ""
+
     # E-post (notification API channel=email)
     # mock = loggar bara (API svarar success men inget mail i inkorgen)
     # smtp = Gmail m.fl. | sendgrid = SendGrid HTTP API
