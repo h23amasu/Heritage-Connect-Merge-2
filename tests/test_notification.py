@@ -69,6 +69,19 @@ def test_notification_blocked_phone():
     assert response.json()["error"] == "invalid_recipient"
 
 
+def test_notification_blocks_documentation_example_phone():
+    response = client.post(
+        "/notification/send-notification",
+        json={
+            "type": "sms",
+            "to": "+46701234567",
+            "message": "Hej!",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_recipient"
+
+
 def test_notification_invalid_recipient_phone():
     response = client.post(
         "/notification/send-notification",

@@ -3,13 +3,17 @@ Telefonnummer som aldrig får användas i tester eller API-anrop (SMS/geofencing
 """
 import re
 
-# Reserverade testnummer – blockeras i API (skicka aldrig riktiga SMS hit i automatiska tester).
-# Lägg INTE till riktiga teammedlemmars nummer här.
+# Reserverade testnummer och dokumentationsexempel – blockeras (inga riktiga SMS).
+# +46701234567 används ofta som exempel i docs/UI och ska inte få riktiga utskick.
 BLOCKED_PHONE_NUMBERS = frozenset(
     {
         "+46700000000",
         "46700000000",
         "0700000000",
+        "+46701234567",
+        "46701234567",
+        "0701234567",
+        "701234567",
     }
 )
 

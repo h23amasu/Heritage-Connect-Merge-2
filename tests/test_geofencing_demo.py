@@ -21,7 +21,7 @@ def setup_function():
 
 
 def test_sends_sms_once_per_site_when_traveling():
-    phone = "+46701234567"
+    phone = "+46738100354"
 
     first = process_location_demo(phone, REMOTE[0], REMOTE[1])
     assert first["success"] is True

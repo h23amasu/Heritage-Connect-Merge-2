@@ -13,7 +13,9 @@ from app.schemas import (
     SubscriptionPauseRequest,
 )
 from app.services.auth_service import normalize_phone
+from app.clients.remote_services import deliver_notification_message
 from app.services.geofencing_demo import _demo_users, reset_demo_geofencing_user
+from app.schemas import NotificationRequest
 from app.services.receipt_service import send_subscription_receipt
 from app.services.payment_service import process_payment
 
@@ -65,6 +67,18 @@ def create_demo_subscription(
     _demo_users[user_key]["notification_channel"] = channel
     if channel == "sms":
         _demo_users[user_key]["phone"] = user_key
+
+    if channel == "sms" and background_tasks:
+        confirmation = NotificationRequest(
+            type="sms",
+            to=user_key,
+            message=(
+                "Din Heritage Connect-prenumeration är nu aktiv. "
+                "Du får nu notiser om världsarv nära dig."
+            ),
+            user_id=user_key,
+        )
+        background_tasks.add_task(deliver_notification_message, confirmation)
 
     _demo_subscriptions[user_key] = {
         "subscription_id": 1,

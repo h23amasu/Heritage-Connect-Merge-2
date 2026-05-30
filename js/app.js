@@ -2256,13 +2256,7 @@ function buildPreferencesPayload(extra = {}) {
 }
 
 function getLocationReportPhone() {
-  let phone = normalizePhoneForApi(prototypeState.phone || "");
-  if ((!phone || isPlaceholderContact(phone)) && prototypeState.user_id) {
-    const fromUserId = normalizePhoneForApi(prototypeState.user_id);
-    if (fromUserId.startsWith("+") && fromUserId.length >= 10) {
-      phone = fromUserId;
-    }
-  }
+  const phone = normalizePhoneForApi(prototypeState.phone || "");
   if (!phone || isPlaceholderContact(phone) || phone === "bankid-user") {
     return null;
   }
@@ -2474,7 +2468,7 @@ async function sendSmsCode() {
   const sendBtn = document.getElementById("loginSendCodeBtn");
 
   if (!phone || isPlaceholderContact(phone)) {
-    toast("Ange ett giltigt mobilnummer (t.ex. +46701234567).");
+    toast("Ange ett giltigt mobilnummer (t.ex. +46761104465).");
     return;
   }
 
@@ -2778,7 +2772,6 @@ async function completeSubscriptionAfterPayment(paymentFields) {
   toast("Betalning genomförd. Prenumerationen är aktiv.");
 
   startLocationReporting();
-  sendConfirmationNotificationPayload();
   window.setTimeout(() => {
     if (prototypeState.subscription_active) {
       void reportLocationToApi();
@@ -2940,7 +2933,7 @@ async function sendToApi(endpoint, payload) {
     if (!response.ok) {
       const err = result.error || "okänt fel";
       if (err === "invalid_recipient") {
-        toast("API-fel: ogiltigt mobilnummer – använd format +46701234567");
+        toast("API-fel: ogiltigt mobilnummer – använd format +46761104465");
       } else {
         toast(`API-fel: ${err}`);
       }

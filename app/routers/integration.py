@@ -31,9 +31,9 @@ def integration_config():
         "uses_external_notification_service": bool(settings.NOTIFICATION_SERVICE_URL.strip()),
         "notification_payload_example": {
             "type": "sms",
-            "to": "+46701234567",
+            "to": "+46700000001",
             "message": f"Du är nära Gruvorna i Falun {site_detail_url(example_site, unesco_id=example_site)}",
-            "user_id": "+46701234567",
+            "user_id": "+46700000001",
             "site_id": example_site,
         },
     }
