@@ -44,13 +44,15 @@ def test_payment_intent_requires_stripe():
 
 
 def test_email_auth_flow():
+    email = "test@example.com"
     client.post(
         "/api/auth/request-email-code",
-        json={"email": "test@example.com", "purpose": "login"},
+        json={"email": email, "purpose": "login"},
     )
+    code = _email_otp_store[email]["code"]
     response = client.post(
         "/api/auth/verify-email-code",
-        json={"email": "test@example.com", "code": "123456"},
+        json={"email": email, "code": code},
     )
     assert response.status_code == 200
     assert response.json()["method"] == "email"

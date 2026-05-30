@@ -183,6 +183,8 @@ const UI_MODAL_I18N = {
     "Engångskod via SMS": "One-time code via SMS",
     "Utveckling: efter \"Skicka SMS-kod\" är koden 123456 (samma som i API-test).":
       "Development: after \"Send SMS code\" the code is 123456 (same as in the API test).",
+    "Koden skickas till ditt mobilnummer och gäller i 5 minuter.":
+      "The code is sent to your mobile number and is valid for 5 minutes.",
     "Logga in": "Log in",
     "eller via e-postkod (utlandet)": "or via email code (international)",
     "Ange din registrerade e-postadress.": "Enter your registered email address.",
@@ -190,12 +192,16 @@ const UI_MODAL_I18N = {
     "Engångskod via e-post": "One-time code via email",
     "Utveckling: efter \"Skicka e-postkod\" är koden 123456.":
       "Development: after \"Send email code\" the code is 123456.",
+    "Koden skickas till din e-post och gäller i 5 minuter.":
+      "The code is sent to your email and is valid for 5 minutes.",
     "Logga in med e-post": "Log in with email",
     "Betala prenumeration": "Pay for subscription",
     "Sammanfattning innan betalning.": "Summary before payment.",
     "Prenumeration: SMS om världsarv nära dig": "Subscription: SMS about world heritage near you",
     "Pris: 99 SEK (engångsbetalning, ingen auto-förnyelse – SMS-påminnelse skickas 3 dagar innan utgång)":
-      "Price: 99 SEK (one-time payment, no auto-renewal – SMS reminder sent 3 days before expiry)",
+      "Price: 99 SEK (one-time payment, no auto-renewal – you must pay again to continue after the period ends)",
+    "Pris: 99 SEK (engångsbetalning – du betalar igen manuellt när perioden löper ut, ingen auto-förnyelse)":
+      "Price: 99 SEK (one-time payment – you pay again manually when the period ends, no auto-renewal)",
     "Kort hanteras av betalleverantören – sparas inte i Heritage Connect":
       "Card is handled by the payment provider – not stored in Heritage Connect",
     "Välj prenumerationsperiod": "Choose subscription period",
@@ -947,7 +953,7 @@ async function updatePriceSummaryBox() {
   if (!priceBox) return;
   const months = Math.round(prototypeState.duration_days / 30);
   const period = months === 1 ? "1 månad" : `${months} månader`;
-  const svText = `Pris: ${SUBSCRIPTION_PRICE_SEK} SEK – ${period} (ingen auto-förnyelse, SMS-påminnelse 3 dagar innan utgång)`;
+  const svText = `Pris: ${SUBSCRIPTION_PRICE_SEK} SEK – ${period} (engångsbetalning, du betalar igen manuellt när perioden löper ut)`;
   await setElementI18n(priceBox, svText);
 }
 
@@ -2586,11 +2592,11 @@ async function sendSmsCode() {
 
     const otp = document.getElementById("otp");
     if (otp) {
-      otp.value = "123456";
+      otp.value = "";
       otp.focus();
     }
 
-    toast(data.message || "SMS-kod skickad. Utvecklingskod: 123456");
+    toast(data.message || "SMS-kod skickad. Kontrollera ditt mobilnummer.");
   } catch (error) {
     console.warn("request-code misslyckades:", error);
     toast("Kunde inte nå API – kontrollera att uvicorn körs på port 8000.");
@@ -2691,14 +2697,11 @@ async function sendEmailCode() {
 
     const otp = document.getElementById("emailOtp");
     if (otp) {
-      otp.value = "123456";
+      otp.value = "";
       otp.focus();
     }
 
-    toast(
-      data.message ||
-        "Inloggningskod skickad. Utvecklingskod: 123456 (mejl kan komma strax efter)."
-    );
+    toast(data.message || "Inloggningskod skickad. Kontrollera din e-post.");
   } catch (error) {
     console.warn("request-email-code misslyckades:", error);
     toast(formatApiConnectionError(error));

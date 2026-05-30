@@ -4,7 +4,6 @@ Autentisering – SMS-engångskod och BankID (mock eller riktig RP).
 from __future__ import annotations
 
 import logging
-import random
 import secrets
 import threading
 import time
@@ -24,7 +23,10 @@ _email_otp_store: dict[str, dict] = {}
 _session_store: dict[str, str] = {}
 
 OTP_TTL_SECONDS = 300
-DEV_OTP_CODE = "123456"
+
+
+def _generate_otp_code() -> str:
+    return f"{secrets.randbelow(900000) + 100000:06d}"
 
 
 def normalize_phone(phone: str) -> str:
@@ -47,7 +49,7 @@ def request_sms_code(phone: str) -> tuple[bool, Optional[str], Optional[str]]:
     if not normalized.startswith("+") or len(normalized) < 10:
         return False, "invalid_recipient", None
 
-    code = DEV_OTP_CODE if True else f"{random.randint(100000, 999999)}"
+    code = _generate_otp_code()
     _otp_store[normalized] = {
         "code": code,
         "expires_at": time.time() + OTP_TTL_SECONDS,
@@ -76,9 +78,8 @@ def _dispatch_login_code_async(notification: NotificationRequest) -> None:
             dispatch_notification(notification)
         except Exception:
             logger.exception(
-                "Kunde inte skicka inloggningskod till %s – koden finns sparad (demo: %s)",
+                "Kunde inte skicka inloggningskod till %s – koden finns sparad lokalt",
                 notification.to,
-                DEV_OTP_CODE,
             )
 
     threading.Thread(target=_run, daemon=True).start()
@@ -90,7 +91,7 @@ def request_email_code(email: str) -> tuple[bool, Optional[str], Optional[str]]:
     if "@" not in normalized:
         return False, "invalid_recipient", None
 
-    code = DEV_OTP_CODE
+    code = _generate_otp_code()
     _email_otp_store[normalized] = {
         "code": code,
         "expires_at": time.time() + OTP_TTL_SECONDS,

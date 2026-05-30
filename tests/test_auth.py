@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import bankid_service
-from app.services.auth_service import _email_otp_store, _otp_store
+from app.services.auth_service import _email_otp_store, _otp_store, normalize_phone
 
 client = TestClient(app)
 
@@ -62,14 +62,25 @@ def test_bankid_config():
 
 
 def test_verify_code_with_dev_code():
+    phone = "+46738100354"
     client.post(
         "/api/auth/request-code",
-        json={"phone": "+46738100354", "purpose": "login"},
+        json={"phone": phone, "purpose": "login"},
     )
+    code = _otp_store[normalize_phone(phone)]["code"]
     response = client.post(
         "/api/auth/verify-code",
-        json={"phone": "+46738100354", "code": "123456"},
+        json={"phone": phone, "code": code},
     )
     assert response.status_code == 200
     assert response.json()["success"] is True
     assert "access_token" in response.json()
+
+
+def test_otp_codes_are_unique_per_request():
+    phone = "+46738100354"
+    client.post("/api/auth/request-code", json={"phone": phone, "purpose": "login"})
+    first = _otp_store[normalize_phone(phone)]["code"]
+    client.post("/api/auth/request-code", json={"phone": phone, "purpose": "login"})
+    second = _otp_store[normalize_phone(phone)]["code"]
+    assert first != second
