@@ -243,6 +243,10 @@ const UI_MODAL_I18N = {
       "Mark as visited, no more SMS about this world heritage site",
     "Jag vill få fler SMS om detta världsarv":
       "I want to receive more SMS about this world heritage site",
+    "Först röd knapp (stoppa SMS), sedan grön (få SMS igen).":
+      "Use the red button first (stop SMS), then the green button (get SMS again).",
+    "Markera platsen som besökt först (röd knapp ovan).":
+      "Mark the site as visited first (red button above).",
     "Inga fler SMS om detta världsarv.": "No more SMS about this world heritage site.",
     "PRENUMERATION": "SUBSCRIPTION",
     "Avsluta prenumeration": "Cancel subscription",
@@ -291,6 +295,8 @@ const I18N_SV = {
   GPS_FAILED: "Kunde inte hämta plats – visar närmaste i Sverige.",
   PREF_MARK_VISITED: "Markera som besökt, inga fler SMS om detta världsarv",
   PREF_WANT_SMS_AGAIN: "Jag vill få fler SMS om detta världsarv",
+  PREF_MARK_FIRST: "Markera platsen som besökt först (röd knapp ovan).",
+  PREF_ALREADY_VISITED: "Du har redan markerat detta världsarv som besökt.",
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
@@ -3334,8 +3340,6 @@ async function syncSitePreferenceUi() {
   if (!markBtn || !resetBtn) return;
 
   const visited = isCurrentSiteMarkedVisited();
-  markBtn.disabled = visited;
-  resetBtn.disabled = !visited;
   markBtn.classList.toggle("is-active", !visited);
   markBtn.classList.toggle("is-inactive", visited);
   resetBtn.classList.toggle("is-active", visited);
@@ -3353,7 +3357,10 @@ async function markSiteAsVisited() {
     toast(await translateUiText("Inget världsarv valt.", getActiveReaderLang()));
     return;
   }
-  if (isCurrentSiteMarkedVisited()) return;
+  if (isCurrentSiteMarkedVisited()) {
+    toast(await translateUiText(I18N_SV.PREF_ALREADY_VISITED, getActiveReaderLang()));
+    return;
+  }
 
   const key = String(siteId);
   if (!prototypeState.visited_sites.includes(key)) {
@@ -3382,7 +3389,10 @@ async function resetSiteNotifications() {
     toast(await translateUiText("Inget världsarv valt.", getActiveReaderLang()));
     return;
   }
-  if (!isCurrentSiteMarkedVisited()) return;
+  if (!isCurrentSiteMarkedVisited()) {
+    toast(await translateUiText(I18N_SV.PREF_MARK_FIRST, getActiveReaderLang()));
+    return;
+  }
 
   const key = String(siteId);
   prototypeState.visited_sites = prototypeState.visited_sites.filter(

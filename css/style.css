@@ -1139,6 +1139,12 @@
       padding-bottom: 12px;
     }
 
+    .preference-hint {
+      margin: 4px 0 0;
+      text-align: center;
+      max-width: min(100%, 340px);
+    }
+
     .preference-actions {
       display: flex;
       flex-direction: column;
@@ -1179,17 +1185,29 @@
       color: var(--success);
     }
 
-    .service-modal .preference-actions .preference-box--mark:not(:disabled):hover {
+    .service-modal .preference-actions .preference-box.is-inactive {
+      opacity: 0.92;
+      cursor: pointer;
+    }
+
+    .service-modal .preference-actions .preference-box.is-active {
+      opacity: 1;
+      box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.06);
+    }
+
+    .service-modal .preference-actions .preference-box--mark:not(:disabled):hover,
+    .service-modal .preference-actions .preference-box--mark.is-inactive:hover {
       background: #ffe4e4;
     }
 
-    .service-modal .preference-actions .preference-box--resume:not(:disabled):hover {
+    .service-modal .preference-actions .preference-box--resume:not(:disabled):hover,
+    .service-modal .preference-actions .preference-box--resume.is-inactive:hover {
       background: #d1fae5;
     }
 
     .service-modal .preference-actions .preference-box:disabled {
       opacity: 1;
-      cursor: not-allowed;
+      cursor: pointer;
       box-shadow: none;
     }
 
