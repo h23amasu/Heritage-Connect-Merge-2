@@ -241,12 +241,16 @@ const UI_MODAL_I18N = {
     "INNEHÅLLSPREFERENSER": "CONTENT PREFERENCES",
     "Markera som besökt, inga fler SMS om detta världsarv":
       "Mark as visited, no more SMS about this world heritage site",
+    "Jag vill få SMS om detta världsarv":
+      "I want SMS about this world heritage site",
     "Jag vill få fler SMS om detta världsarv":
-      "I want to receive more SMS about this world heritage site",
-    "Först röd knapp (stoppa SMS), sedan grön (få SMS igen).":
-      "Use the red button first (stop SMS), then the green button (get SMS again).",
-    "Markera platsen som besökt först (röd knapp ovan).":
-      "Mark the site as visited first (red button above).",
+      "I want SMS about this world heritage site",
+    "Grön knapp aktiverar SMS när du är nära. Röd knapp stoppar SMS.":
+      "Green button enables SMS when you are nearby. Red button stops SMS.",
+    "SMS om detta världsarv är redan aktiverat.":
+      "SMS for this world heritage site is already enabled.",
+    "Du har redan stoppat SMS om detta världsarv.":
+      "You have already stopped SMS for this world heritage site.",
     "Inga fler SMS om detta världsarv.": "No more SMS about this world heritage site.",
     "PRENUMERATION": "SUBSCRIPTION",
     "Avsluta prenumeration": "Cancel subscription",
@@ -294,9 +298,8 @@ const I18N_SV = {
   GPS_DENIED: "Plats nekad – visar närmaste världsarv i Sverige.",
   GPS_FAILED: "Kunde inte hämta plats – visar närmaste i Sverige.",
   PREF_MARK_VISITED: "Markera som besökt, inga fler SMS om detta världsarv",
-  PREF_WANT_SMS_AGAIN: "Jag vill få fler SMS om detta världsarv",
-  PREF_MARK_FIRST: "Markera platsen som besökt först (röd knapp ovan).",
-  PREF_ALREADY_VISITED: "Du har redan markerat detta världsarv som besökt.",
+  PREF_WANT_SMS_AGAIN: "Jag vill få SMS om detta världsarv",
+  PREF_SMS_ALREADY_ON: "SMS om detta världsarv är redan aktiverat.",
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
@@ -3340,10 +3343,10 @@ async function syncSitePreferenceUi() {
   if (!markBtn || !resetBtn) return;
 
   const visited = isCurrentSiteMarkedVisited();
-  markBtn.classList.toggle("is-active", !visited);
-  markBtn.classList.toggle("is-inactive", visited);
-  resetBtn.classList.toggle("is-active", visited);
-  resetBtn.classList.toggle("is-inactive", !visited);
+  markBtn.classList.toggle("is-active", visited);
+  markBtn.classList.toggle("is-inactive", !visited);
+  resetBtn.classList.toggle("is-active", !visited);
+  resetBtn.classList.toggle("is-inactive", visited);
   markBtn.setAttribute("aria-pressed", visited ? "true" : "false");
   resetBtn.setAttribute("aria-pressed", visited ? "false" : "true");
 
@@ -3358,7 +3361,7 @@ async function markSiteAsVisited() {
     return;
   }
   if (isCurrentSiteMarkedVisited()) {
-    toast(await translateUiText(I18N_SV.PREF_ALREADY_VISITED, getActiveReaderLang()));
+    toast(await translateUiText("Du har redan stoppat SMS om detta världsarv.", getActiveReaderLang()));
     return;
   }
 
@@ -3389,12 +3392,9 @@ async function resetSiteNotifications() {
     toast(await translateUiText("Inget världsarv valt.", getActiveReaderLang()));
     return;
   }
-  if (!isCurrentSiteMarkedVisited()) {
-    toast(await translateUiText(I18N_SV.PREF_MARK_FIRST, getActiveReaderLang()));
-    return;
-  }
 
   const key = String(siteId);
+  const wasBlocked = isCurrentSiteMarkedVisited();
   prototypeState.visited_sites = prototypeState.visited_sites.filter(
     site => String(site) !== key
   );
@@ -3405,14 +3405,19 @@ async function resetSiteNotifications() {
   });
 
   logApiPayload(
-    "Återaktiverar SMS för världsarv",
+    "Aktiverar SMS för världsarv",
     API_ENDPOINTS.updatePreferences,
     payload
   );
 
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
   await syncSitePreferenceUi();
-  toast(await translateUiText("Du kommer få SMS om detta världsarv igen.", getActiveReaderLang()));
+
+  if (wasBlocked) {
+    toast(await translateUiText("Du kommer få SMS om detta världsarv när du är nära.", getActiveReaderLang()));
+  } else {
+    toast(await translateUiText(I18N_SV.PREF_SMS_ALREADY_ON, getActiveReaderLang()));
+  }
 }
 
 function cancelSubscription() {
