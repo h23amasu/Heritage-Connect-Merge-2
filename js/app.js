@@ -2235,6 +2235,13 @@ function closeServiceModal() {
   resetDemoState();
 }
 
+function scrollModalToTop() {
+  const body = document.querySelector(".service-modal-body");
+  if (body) {
+    body.scrollTop = 0;
+  }
+}
+
 function openModalStep(step) {
   document.querySelectorAll(".modal-step").forEach(section => {
     section.classList.remove("active");
@@ -2249,6 +2256,7 @@ function openModalStep(step) {
   }
 
   target.classList.add("active");
+  scrollModalToTop();
 
   const run = async () => {
     if (step === "payment") {
@@ -2263,10 +2271,8 @@ function openModalStep(step) {
       }
       syncProfileContactFields();
       await syncSitePreferenceUi();
-      window.requestAnimationFrame(() => {
-        document.querySelector(".settings-contact-form")?.scrollIntoView({ block: "nearest" });
-      });
     }
+    scrollModalToTop();
     await updateModalProgressTitle(getActiveReaderLang());
 
     const stepLabel = document.getElementById("stepLabel");
