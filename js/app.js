@@ -241,16 +241,16 @@ const UI_MODAL_I18N = {
     "INNEHÅLLSPREFERENSER": "CONTENT PREFERENCES",
     "Markera som besökt, inga fler SMS om detta världsarv":
       "Mark as visited, no more SMS about this world heritage site",
-    "Jag vill få SMS om detta världsarv":
-      "I want SMS about this world heritage site",
-    "Jag vill få fler SMS om detta världsarv":
-      "I want SMS about this world heritage site",
-    "Grön knapp aktiverar SMS när du är nära. Röd knapp stoppar SMS.":
-      "Green button enables SMS when you are nearby. Red button stops SMS.",
+    "Aktivera SMS om detta världsarv": "Enable SMS for this world heritage site",
+    "Stoppa SMS om detta världsarv": "Stop SMS for this world heritage site",
+    "Grön = aktivera SMS. Röd = stoppa SMS. Grön kan alltid klickas först.":
+      "Green = enable SMS. Red = stop SMS. You can always tap green first.",
+    "SMS aktiverat för detta världsarv.": "SMS enabled for this world heritage site.",
+    "SMS stoppat för detta världsarv.": "SMS stopped for this world heritage site.",
     "SMS om detta världsarv är redan aktiverat.":
       "SMS for this world heritage site is already enabled.",
-    "Du har redan stoppat SMS om detta världsarv.":
-      "You have already stopped SMS for this world heritage site.",
+    "SMS om detta världsarv är redan stoppat.":
+      "SMS for this world heritage site is already stopped.",
     "Inga fler SMS om detta världsarv.": "No more SMS about this world heritage site.",
     "PRENUMERATION": "SUBSCRIPTION",
     "Avsluta prenumeration": "Cancel subscription",
@@ -297,9 +297,12 @@ const I18N_SV = {
   GPS_UNSUPPORTED: "GPS stöds inte – visar närmaste i Sverige.",
   GPS_DENIED: "Plats nekad – visar närmaste världsarv i Sverige.",
   GPS_FAILED: "Kunde inte hämta plats – visar närmaste i Sverige.",
-  PREF_MARK_VISITED: "Markera som besökt, inga fler SMS om detta världsarv",
-  PREF_WANT_SMS_AGAIN: "Jag vill få SMS om detta världsarv",
+  PREF_MARK_VISITED: "Stoppa SMS om detta världsarv",
+  PREF_WANT_SMS_AGAIN: "Aktivera SMS om detta världsarv",
+  PREF_SMS_ENABLED: "SMS aktiverat för detta världsarv.",
+  PREF_SMS_STOPPED: "SMS stoppat för detta världsarv.",
   PREF_SMS_ALREADY_ON: "SMS om detta världsarv är redan aktiverat.",
+  PREF_SMS_ALREADY_OFF: "SMS om detta världsarv är redan stoppat.",
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
@@ -2460,13 +2463,6 @@ async function reportLocationToApi() {
     }
     if (data.notified && data.nearest_site?.name) {
       toast(`SMS skickat – du är nära ${data.nearest_site.name}.`);
-      if (data.nearest_site.unesco_id || data.nearest_site.id) {
-        const siteId = String(data.nearest_site.unesco_id || data.nearest_site.id);
-        if (!prototypeState.visited_sites.includes(siteId)) {
-          prototypeState.visited_sites.push(siteId);
-        }
-        syncSitePreferenceUi().catch(() => {});
-      }
     } else if (data.reason === "sms_delivery_failed") {
       toast(describeGeofencingSkipReason(data.reason));
     } else if (data.reason === "cooldown") {
@@ -3361,7 +3357,7 @@ async function markSiteAsVisited() {
     return;
   }
   if (isCurrentSiteMarkedVisited()) {
-    toast(await translateUiText("Du har redan stoppat SMS om detta världsarv.", getActiveReaderLang()));
+    toast(await translateUiText(I18N_SV.PREF_SMS_ALREADY_OFF, getActiveReaderLang()));
     return;
   }
 
@@ -3383,7 +3379,7 @@ async function markSiteAsVisited() {
 
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
   await syncSitePreferenceUi();
-  toast(await translateUiText("Inga fler SMS om detta världsarv.", getActiveReaderLang()));
+  toast(await translateUiText(I18N_SV.PREF_SMS_STOPPED, getActiveReaderLang()));
 }
 
 async function resetSiteNotifications() {
@@ -3414,7 +3410,7 @@ async function resetSiteNotifications() {
   await syncSitePreferenceUi();
 
   if (wasBlocked) {
-    toast(await translateUiText("Du kommer få SMS om detta världsarv när du är nära.", getActiveReaderLang()));
+    toast(await translateUiText(I18N_SV.PREF_SMS_ENABLED, getActiveReaderLang()));
   } else {
     toast(await translateUiText(I18N_SV.PREF_SMS_ALREADY_ON, getActiveReaderLang()));
   }

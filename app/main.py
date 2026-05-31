@@ -142,7 +142,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 @app.get("/index.html", include_in_schema=False)
 def serve_webapp():
     """Prototypen – dela denna länk med läraren/kunden."""
-    return FileResponse(_PROJECT_ROOT / "index.html")
+    return FileResponse(
+        _PROJECT_ROOT / "index.html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/sites/{site_ref}", include_in_schema=False)

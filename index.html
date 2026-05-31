@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=61" />
+  <link rel="stylesheet" href="css/style.css?v=62" />
 </head>
 <body>
   <div class="app-shell">
@@ -373,9 +374,9 @@
                 <div class="settings-row settings-row--preferences">
                   <h3 data-i18n>INNEHÅLLSPREFERENSER</h3>
                   <div class="preference-actions">
-                    <button type="button" class="preference-box preference-box--resume" id="resetVisitedBtn" data-i18n onclick="resetSiteNotifications()">Jag vill få SMS om detta världsarv</button>
-                    <button type="button" class="preference-box preference-box--mark" id="markSiteVisitedBtn" data-i18n onclick="markSiteAsVisited()">Markera som besökt, inga fler SMS om detta världsarv</button>
-                    <p class="small-muted preference-hint" data-i18n>Grön knapp aktiverar SMS när du är nära. Röd knapp stoppar SMS.</p>
+                    <button type="button" class="preference-box preference-box--resume" id="resetVisitedBtn" data-i18n onclick="resetSiteNotifications()">Aktivera SMS om detta världsarv</button>
+                    <button type="button" class="preference-box preference-box--mark" id="markSiteVisitedBtn" data-i18n onclick="markSiteAsVisited()">Stoppa SMS om detta världsarv</button>
+                    <p class="small-muted preference-hint" data-i18n>Grön = aktivera SMS. Röd = stoppa SMS. Grön kan alltid klickas först.</p>
                   </div>
                 </div>
 
@@ -405,6 +406,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=103"></script>
+  <script src="js/app.js?v=104"></script>
 </body>
 </html>
