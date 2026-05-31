@@ -233,6 +233,9 @@ const UI_MODAL_I18N = {
     "INNEHÅLLSPREFERENSER": "CONTENT PREFERENCES",
     "Markera som besökt, inga fler SMS om detta världsarv":
       "Mark as visited, no more SMS about this world heritage site",
+    "Jag vill få fler SMS om detta världsarv":
+      "I want to receive more SMS about this world heritage site",
+    "Inga fler SMS om detta världsarv.": "No more SMS about this world heritage site.",
     "PRENUMERATION": "SUBSCRIPTION",
     "Avsluta prenumeration": "Cancel subscription",
     "Dessa inställningar kräver inloggning och visas bara för aktiva prenumeranter.":
@@ -278,8 +281,8 @@ const I18N_SV = {
   GPS_UNSUPPORTED: "GPS stöds inte – visar närmaste i Sverige.",
   GPS_DENIED: "Plats nekad – visar närmaste världsarv i Sverige.",
   GPS_FAILED: "Kunde inte hämta plats – visar närmaste i Sverige.",
-  PREF_ACTIVE: "Markera som besökt, inga fler SMS om detta världsarv",
-  PREF_INACTIVE: "Aktivera SMS om detta världsarv igen",
+  PREF_MARK_VISITED: "Markera som besökt, inga fler SMS om detta världsarv",
+  PREF_WANT_SMS_AGAIN: "Jag vill få fler SMS om detta världsarv",
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
@@ -1747,12 +1750,7 @@ function resetDemoState() {
   setElementI18n(document.getElementById("confirmationMessage"), I18N_SV.CONFIRM_CHANNEL).catch(() => {});
   setElementI18n(document.getElementById("settingsChannelMessage"), I18N_SV.ACTIVE_SMS).catch(() => {});
 
-  document.querySelectorAll(".preference-box").forEach(box => {
-    setElementI18n(box, I18N_SV.PREF_ACTIVE).catch(() => {});
-    box.style.background = "var(--danger-bg)";
-    box.style.color = "var(--danger)";
-    box.style.borderColor = "#e58c8c";
-  });
+  syncSitePreferenceUi().catch(() => {});
 }
 
 function resolveI18nText(source, target) {
@@ -2072,6 +2070,7 @@ async function applyDynamicLanguageContent(target) {
   if (document.getElementById("confirmation")?.classList.contains("active")) {
     await updateConfirmationMessage();
     syncSettingsChannelButtons();
+    await syncSitePreferenceUi();
   }
   if (document.getElementById("subscribe")?.classList.contains("active")) {
     updateContactField();
@@ -2229,6 +2228,9 @@ function openModalStep(step) {
       await updatePaymentProviderUi();
       await updatePriceSummaryBox();
       await prepareStripePaymentStep();
+    }
+    if (step === "confirmation") {
+      await syncSitePreferenceUi();
     }
     await updateModalProgressTitle(getActiveReaderLang());
 
@@ -2431,6 +2433,7 @@ async function reportLocationToApi() {
         if (!prototypeState.visited_sites.includes(siteId)) {
           prototypeState.visited_sites.push(siteId);
         }
+        syncSitePreferenceUi().catch(() => {});
       }
     } else if (data.reason === "sms_delivery_failed") {
       toast(describeGeofencingSkipReason(data.reason));
@@ -3201,69 +3204,81 @@ async function updateSettingsChannel(element, channel) {
   toast(await translateUiText(channelText, getActiveReaderLang()));
 }
 
-async function togglePreference(element) {
-  const source = element.dataset.i18nSource || element.textContent.trim();
-  const isMarkingVisited = source === I18N_SV.PREF_ACTIVE;
+function isCurrentSiteMarkedVisited() {
+  const siteId = currentSite?.site_id;
+  if (!siteId) return false;
+  const key = String(siteId);
+  return prototypeState.visited_sites.some(site => String(site) === key);
+}
 
+async function syncSitePreferenceUi() {
+  const markBtn = document.getElementById("markSiteVisitedBtn");
   const resetBtn = document.getElementById("resetVisitedBtn");
-  if (isMarkingVisited) {
-    await setElementI18n(element, I18N_SV.PREF_INACTIVE);
-    element.style.background = "var(--success-bg)";
-    element.style.color = "var(--success)";
-    element.style.borderColor = "#86efac";
+  if (!markBtn || !resetBtn) return;
 
-    if (!prototypeState.visited_sites.includes(currentSite.site_id)) {
-      prototypeState.visited_sites.push(currentSite.site_id);
-    }
-    if (resetBtn) resetBtn.style.display = "";
-  } else {
-    await setElementI18n(element, I18N_SV.PREF_ACTIVE);
-    element.style.background = "var(--danger-bg)";
-    element.style.color = "var(--danger)";
-    element.style.borderColor = "#e58c8c";
+  const visited = isCurrentSiteMarkedVisited();
+  markBtn.disabled = visited;
+  resetBtn.disabled = !visited;
 
-    prototypeState.visited_sites = prototypeState.visited_sites.filter(
-      site => site !== currentSite.site_id
-    );
-    if (resetBtn) resetBtn.style.display = "none";
+  await setElementI18n(markBtn, I18N_SV.PREF_MARK_VISITED);
+  await setElementI18n(resetBtn, I18N_SV.PREF_WANT_SMS_AGAIN);
+}
+
+async function markSiteAsVisited() {
+  const siteId = currentSite?.site_id;
+  if (!siteId) {
+    toast(await translateUiText("Inget världsarv valt.", getActiveReaderLang()));
+    return;
+  }
+  if (isCurrentSiteMarkedVisited()) return;
+
+  const key = String(siteId);
+  if (!prototypeState.visited_sites.includes(key)) {
+    prototypeState.visited_sites.push(key);
   }
 
   const payload = buildPreferencesPayload({
-    site_id: currentSite.site_id,
-    visited: isMarkingVisited,
+    site_id: siteId,
+    visited: true,
   });
 
   logApiPayload(
-    "Uppdaterar innehållspreferens",
+    "Markerar världsarv som besökt",
     API_ENDPOINTS.updatePreferences,
     payload
   );
 
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
+  await syncSitePreferenceUi();
+  toast(await translateUiText("Inga fler SMS om detta världsarv.", getActiveReaderLang()));
 }
 
 async function resetSiteNotifications() {
+  const siteId = currentSite?.site_id;
+  if (!siteId) {
+    toast(await translateUiText("Inget världsarv valt.", getActiveReaderLang()));
+    return;
+  }
+  if (!isCurrentSiteMarkedVisited()) return;
+
+  const key = String(siteId);
   prototypeState.visited_sites = prototypeState.visited_sites.filter(
-    site => site !== currentSite.site_id
+    site => String(site) !== key
   );
 
-  const prefBox = document.querySelector(".preference-box");
-  if (prefBox) {
-    await setElementI18n(prefBox, I18N_SV.PREF_ACTIVE);
-    prefBox.style.background = "var(--danger-bg)";
-    prefBox.style.color = "var(--danger)";
-    prefBox.style.borderColor = "#e58c8c";
-  }
-
-  const btn = document.getElementById("resetVisitedBtn");
-  if (btn) btn.style.display = "none";
-
   const payload = buildPreferencesPayload({
-    site_id: currentSite.site_id,
+    site_id: siteId,
     visited: false,
   });
 
+  logApiPayload(
+    "Återaktiverar SMS för världsarv",
+    API_ENDPOINTS.updatePreferences,
+    payload
+  );
+
   await patchToApi(API_ENDPOINTS.updatePreferences, payload);
+  await syncSitePreferenceUi();
   toast(await translateUiText("Du kommer få SMS om detta världsarv igen.", getActiveReaderLang()));
 }
 
@@ -3615,8 +3630,9 @@ window.sendEmailCode = sendEmailCode;
 window.loginWithSmsCode = loginWithSmsCode;
 window.loginWithEmailCode = loginWithEmailCode;
 window.paymentComplete = paymentComplete;
-window.togglePreference = togglePreference;
+window.markSiteAsVisited = markSiteAsVisited;
 window.resetSiteNotifications = resetSiteNotifications;
+window.syncSitePreferenceUi = syncSitePreferenceUi;
 window.cancelSubscription = cancelSubscription;
 window.previewNotificationPayload = previewNotificationPayload;
 window.updateContactField = updateContactField;

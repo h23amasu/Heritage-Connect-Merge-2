@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=55" />
+  <link rel="stylesheet" href="css/style.css?v=56" />
 </head>
 <body>
   <div class="app-shell">
@@ -363,7 +363,10 @@
 
                 <div class="settings-row">
                   <h3 data-i18n>INNEHÅLLSPREFERENSER</h3>
-                  <div class="preference-box" data-i18n onclick="togglePreference(this)">Markera som besökt, inga fler SMS om detta världsarv</div>
+                  <div class="preference-actions">
+                    <button type="button" class="preference-box" id="markSiteVisitedBtn" data-i18n onclick="markSiteAsVisited()">Markera som besökt, inga fler SMS om detta världsarv</button>
+                    <button type="button" class="preference-box preference-box--resume" id="resetVisitedBtn" data-i18n onclick="resetSiteNotifications()">Jag vill få fler SMS om detta världsarv</button>
+                  </div>
                 </div>
 
                 <div class="settings-row">
@@ -392,6 +395,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=96"></script>
+  <script src="js/app.js?v=97"></script>
 </body>
 </html>
