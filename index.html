@@ -233,10 +233,11 @@
                   <summary style="display:none"></summary>
                   <div class="policy-box">
                     <h4 data-i18n>Integritetspolicy – Heritage Connect</h4>
-                    <p data-i18n>Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress för att kunna skicka notiser om UNESCO-världsarv i närheten av din position.</p>
-                    <p data-i18n>Din position används enbart för att avgöra vilket världsarv som är närmast dig. Positionsdata lagras inte permanent.</p>
-                    <p data-i18n>Du kan när som helst avsluta din prenumeration och begära radering av dina uppgifter via din profil eller genom att kontakta oss.</p>
-                    <p data-i18n>Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect.</p>
+                    <p data-i18n>Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress, samt din position, med ditt samtycke. Uppgifterna används för att skicka notiser om UNESCO-världsarv när du befinner dig i närheten av ett objekt.</p>
+                    <p data-i18n>Din position används enbart för geofencing – att avgöra när du är tillräckligt nära ett världsarv för att få ett meddelande. Vi använder inte platsdata för reklam eller annan spårning.</p>
+                    <p data-i18n>Medan prenumerationen är aktiv kan vi spara en ungefärlig hemposition och din senaste position för att undvika upprepade notiser i vardagen (t.ex. vid pendling). Dessa uppgifter används inte för andra syften.</p>
+                    <p data-i18n>Du kan när som helst avsluta prenumerationen i din profil. Efter avslut skickas inga fler notiser. Vill du radera dina uppgifter helt kan du begära det via din tidning eller Heritage Connect-support.</p>
+                    <p data-i18n>Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect. SMS och e-post skickas via HelloSMS respektive SendGrid. Tjänsten driftas på servrar hos Railway.</p>
                   </div>
                 </details>
                 <button class="full-width" data-i18n onclick="createSubscriptionDraft()">Gå vidare till betalning</button>
@@ -406,6 +407,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=107"></script>
+  <script src="js/app.js?v=108"></script>
 </body>
 </html>

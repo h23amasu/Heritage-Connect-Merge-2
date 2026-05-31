@@ -165,14 +165,16 @@ const UI_MODAL_I18N = {
     "Jag godkänner villkoren och": "I accept the terms and",
     "integritetspolicyn": "privacy policy",
     "Integritetspolicy – Heritage Connect": "Privacy policy – Heritage Connect",
-    "Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress för att kunna skicka notiser om UNESCO-världsarv i närheten av din position.":
-      "Heritage Connect collects your mobile number and/or email address to send notifications about UNESCO world heritage near your location.",
-    "Din position används enbart för att avgöra vilket världsarv som är närmast dig. Positionsdata lagras inte permanent.":
-      "Your location is only used to determine which world heritage site is nearest. Location data is not stored permanently.",
-    "Du kan när som helst avsluta din prenumeration och begära radering av dina uppgifter via din profil eller genom att kontakta oss.":
-      "You can cancel your subscription and request deletion of your data at any time via your profile or by contacting us.",
-    "Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect.":
-      "Payment information is handled by Stripe and is not stored by Heritage Connect.",
+    "Heritage Connect samlar in ditt mobilnummer och/eller din e-postadress, samt din position, med ditt samtycke. Uppgifterna används för att skicka notiser om UNESCO-världsarv när du befinner dig i närheten av ett objekt.":
+      "Heritage Connect collects your mobile number and/or email address, and your location, with your consent. The data is used to send notifications about UNESCO world heritage when you are near a site.",
+    "Din position används enbart för geofencing – att avgöra när du är tillräckligt nära ett världsarv för att få ett meddelande. Vi använder inte platsdata för reklam eller annan spårning.":
+      "Your location is only used for geofencing – to determine when you are close enough to a world heritage site to receive a message. We do not use location data for advertising or other tracking.",
+    "Medan prenumerationen är aktiv kan vi spara en ungefärlig hemposition och din senaste position för att undvika upprepade notiser i vardagen (t.ex. vid pendling). Dessa uppgifter används inte för andra syften.":
+      "While your subscription is active, we may store an approximate home location and your last known position to avoid repeated notifications in everyday situations (e.g. commuting). This data is not used for other purposes.",
+    "Du kan när som helst avsluta prenumerationen i din profil. Efter avslut skickas inga fler notiser. Vill du radera dina uppgifter helt kan du begära det via din tidning eller Heritage Connect-support.":
+      "You can cancel your subscription at any time in your profile. After cancellation, no further notifications are sent. To request full deletion of your data, contact your newspaper or Heritage Connect support.",
+    "Betalningsinformation hanteras av Stripe och lagras inte av Heritage Connect. SMS och e-post skickas via HelloSMS respektive SendGrid. Tjänsten driftas på servrar hos Railway.":
+      "Payment information is handled by Stripe and is not stored by Heritage Connect. SMS and email are sent via HelloSMS and SendGrid respectively. The service is hosted on servers at Railway.",
     "Gå vidare till betalning": "Continue to payment",
     "eller": "or",
     "Har du redan ett konto?": "Already have an account?",
