@@ -135,6 +135,15 @@ Välj **demo-plats** (Falun, Stockholm, m.fl.) i tidningen eller tillåt GPS.
 pytest
 ```
 
+## Dokumentation
+
+| Dokument | Målgrupp |
+|----------|----------|
+| [docs/anvandarguide.md](docs/anvandarguide.md) | **Slutanvändare** – prenumeration, OwnTracks, SMS-notiser |
+| [docs/OWNTRACKS.md](docs/OWNTRACKS.md) | Teknik – webhook, Railway, felsökning |
+| [docs/API.md](docs/API.md) | API-grupp / integration |
+| [docs/installationsguide-dagspressutgivarna.md](docs/installationsguide-dagspressutgivarna.md) | Utgivare / drift |
+
 ## Projektstruktur
 
 - `app/main.py` – monolit (alla routes + statisk `/demo`)

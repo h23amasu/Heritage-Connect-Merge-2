@@ -1,5 +1,7 @@
 # OwnTracks – bakgrunds-GPS för geofencing-SMS
 
+**Användarguide (svenska, steg för steg):** [anvandarguide.md](anvandarguide.md)
+
 Webbplatsen kan **inte** läsa plats i bakgrunden utan att användaren godkänner om och om igen (särskilt på dator). För riktig “hela tiden”-spårning använder ni **OwnTracks** på **mobil** (iOS/Android).
 
 Officiell guide: [owntracks.org/booklet](https://owntracks.org/booklet/)
