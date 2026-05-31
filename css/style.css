@@ -648,9 +648,16 @@
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      overflow: hidden;
+      animation: fadeIn 150ms ease-in-out;
+    }
+
+    .modal-step.active .modal-page {
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
-      animation: fadeIn 150ms ease-in-out;
+      -webkit-overflow-scrolling: touch;
     }
 
     .service-modal .action-stack {

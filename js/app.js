@@ -2237,24 +2237,21 @@ function closeServiceModal() {
   resetDemoState();
 }
 
-function scrollModalToTop(stepElement) {
-  const body = document.querySelector(".service-modal-body");
+function getModalStepScrollElement(stepElement) {
   const step = stepElement || document.querySelector(".modal-step.active");
+  return step?.querySelector(".modal-page") || step || null;
+}
 
-  if (body) {
-    body.scrollTop = 0;
-  }
-  if (step) {
-    step.scrollTop = 0;
-    step.scrollTo({ top: 0, left: 0, behavior: "instant" });
-  }
+function scrollModalToTop(stepElement) {
+  const scrollEl = getModalStepScrollElement(stepElement);
+  if (!scrollEl) return;
+
+  scrollEl.scrollTop = 0;
+  scrollEl.scrollTo({ top: 0, left: 0, behavior: "instant" });
 
   window.requestAnimationFrame(() => {
-    if (body) body.scrollTop = 0;
-    if (step) {
-      step.scrollTop = 0;
-      step.scrollTo({ top: 0, left: 0, behavior: "instant" });
-    }
+    scrollEl.scrollTop = 0;
+    scrollEl.scrollTo({ top: 0, left: 0, behavior: "instant" });
   });
 }
 
