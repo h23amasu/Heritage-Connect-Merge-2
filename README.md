@@ -140,6 +140,7 @@ pytest
 | Dokument | Målgrupp |
 |----------|----------|
 | [docs/anvandarguide.md](docs/anvandarguide.md) | **Slutanvändare** – prenumeration, OwnTracks, SMS-notiser |
+| [docs/presentation-demo.md](docs/presentation-demo.md) | **Presentation** – terminalkommandon, demo av SMS + plats |
 | [docs/OWNTRACKS.md](docs/OWNTRACKS.md) | Teknik – webhook, Railway, felsökning |
 | [docs/API.md](docs/API.md) | API-grupp / integration |
 | [docs/installationsguide-dagspressutgivarna.md](docs/installationsguide-dagspressutgivarna.md) | Utgivare / drift |
