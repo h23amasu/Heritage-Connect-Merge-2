@@ -223,7 +223,7 @@ const UI_MODAL_I18N = {
       "Thank you for your subscription. Your subscription is now active.",
     "En bekräftelse skickas till vald notiskanal.": "A confirmation will be sent to your chosen notification channel.",
     "NOTISKANAL": "NOTIFICATION CHANNEL",
-    "KONTAKTUPPGIFTER": "CONTACT DETAILS",
+    "Ändra kontaktuppgifter": "Change contact details",
     "E-postadress": "Email address",
     "Spara kontaktuppgifter": "Save contact details",
     "Kontaktuppgifter sparade.": "Contact details saved.",
