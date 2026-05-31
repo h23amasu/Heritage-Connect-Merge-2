@@ -279,7 +279,7 @@ const I18N_SV = {
   GPS_DENIED: "Plats nekad – visar närmaste världsarv i Sverige.",
   GPS_FAILED: "Kunde inte hämta plats – visar närmaste i Sverige.",
   PREF_ACTIVE: "Markera som besökt, inga fler SMS om detta världsarv",
-  PREF_INACTIVE: "Detta världsarv kan visas i SMS igen",
+  PREF_INACTIVE: "Aktivera SMS om detta världsarv igen",
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",

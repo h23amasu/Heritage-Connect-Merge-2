@@ -31,7 +31,7 @@ def create_stripe_payment_intent(
 
     stripe.api_key = settings.STRIPE_SECRET_KEY
     intent = stripe.PaymentIntent.create(
-        amount=int(amount * 100),
+        amount=int(float(amount) * 100),
         currency="sek",
         automatic_payment_methods={"enabled": True},
         metadata=metadata or {},
