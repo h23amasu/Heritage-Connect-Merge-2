@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=64" />
+  <link rel="stylesheet" href="css/style.css?v=65" />
 </head>
 <body>
   <div class="app-shell">
@@ -193,10 +193,10 @@
                 <img id="siteDetailImage" alt="" class="site-detail-img" referrerpolicy="no-referrer" decoding="async" />
                 <div id="siteDetailFallback" class="site-detail-fallback" aria-hidden="true"></div>
               </div>
-              <p id="siteDetailDescription"></p>
-              <div class="action-stack">
+              <div class="action-stack modal-primary-action">
                 <button data-i18n onclick="openModalStep('subscribe')">Prenumerera och få SMS om världsarv nära dig</button>
               </div>
+              <p id="siteDetailDescription"></p>
               <div class="distance" id="siteDetailDistance" data-i18n>Hämtar avstånd…</div>
             </div>
           </div>
@@ -406,6 +406,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=106"></script>
+  <script src="js/app.js?v=107"></script>
 </body>
 </html>

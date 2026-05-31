@@ -30,6 +30,10 @@
 
     body.modal-open {
       overflow: hidden;
+      position: fixed;
+      width: 100%;
+      left: 0;
+      right: 0;
     }
 
     .app-shell {
@@ -632,11 +636,14 @@
 
     .service-modal-body {
       padding: 18px;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
     }
 
     .modal-step {
@@ -644,20 +651,12 @@
     }
 
     .modal-step.active {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
+      display: block;
       animation: fadeIn 150ms ease-in-out;
     }
 
-    .modal-step.active .modal-page {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
+    .modal-primary-action {
+      margin: 4px 0 18px;
     }
 
     .service-modal .action-stack {
@@ -734,7 +733,7 @@
     }
 
     .modal-page {
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid var(--border);
       border-radius: 18px;
       background: #fff;
@@ -1593,5 +1592,9 @@
 
       .service-modal-window {
         max-height: 94vh;
+      }
+
+      .image-box {
+        height: min(220px, 36vh);
       }
     }

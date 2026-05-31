@@ -2205,6 +2205,20 @@ function handleAdKey(event) {
   }
 }
 
+let modalScrollLockY = 0;
+
+function lockBodyScrollForModal() {
+  modalScrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.style.top = `-${modalScrollLockY}px`;
+  document.body.classList.add("modal-open");
+}
+
+function unlockBodyScrollForModal() {
+  document.body.classList.remove("modal-open");
+  document.body.style.top = "";
+  window.scrollTo(0, modalScrollLockY);
+}
+
 function openServiceModal(step = "detail") {
   const modal = document.getElementById("serviceModal");
   if (!modal) return;
@@ -2217,7 +2231,7 @@ function openServiceModal(step = "detail") {
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
+  lockBodyScrollForModal();
   void openModalStep(step);
 }
 
@@ -2227,7 +2241,7 @@ function closeServiceModal() {
 
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
+  unlockBodyScrollForModal();
 
   const stepLabel = document.getElementById("stepLabel");
   if (stepLabel) {
@@ -2237,9 +2251,8 @@ function closeServiceModal() {
   resetDemoState();
 }
 
-function getModalStepScrollElement(stepElement) {
-  const step = stepElement || document.querySelector(".modal-step.active");
-  return step?.querySelector(".modal-page") || step || null;
+function getModalStepScrollElement() {
+  return document.querySelector(".service-modal-body");
 }
 
 function scrollModalToTop(stepElement) {
