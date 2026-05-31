@@ -223,6 +223,14 @@ const UI_MODAL_I18N = {
       "Thank you for your subscription. Your subscription is now active.",
     "En bekräftelse skickas till vald notiskanal.": "A confirmation will be sent to your chosen notification channel.",
     "NOTISKANAL": "NOTIFICATION CHANNEL",
+    "KONTAKTUPPGIFTER": "CONTACT DETAILS",
+    "E-postadress": "Email address",
+    "Spara kontaktuppgifter": "Save contact details",
+    "Kontaktuppgifter sparade.": "Contact details saved.",
+    "Ange ett giltigt mobilnummer.": "Enter a valid mobile number.",
+    "Ange en giltig e-postadress.": "Enter a valid email address.",
+    "Mobilnummeret används redan.": "This mobile number is already in use.",
+    "Inga ändringar att spara.": "No changes to save.",
     "📱 SMS-notiser": "📱 SMS notifications",
     "✉️ E-postnotiser": "✉️ Email notifications",
     "Aktiv kanal: SMS-notiser": "Active channel: SMS notifications",
@@ -288,6 +296,8 @@ const I18N_SV = {
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
   ACTIVE_SMS: "Aktiv kanal: SMS-notiser",
   ACTIVE_EMAIL: "Aktiv kanal: E-postnotiser",
+  SAVE_CONTACT: "Spara kontaktuppgifter",
+  CONTACT_SAVED: "Kontaktuppgifter sparade.",
   BANKID_WAIT: "Väntar på BankID…",
   BANKID_BTN: "🏦 Logga in med BankID (Sverige)",
   SEND_CODE: "Skicka SMS-kod",
@@ -1753,6 +1763,7 @@ function resetDemoState() {
   const confirmationMessage = document.getElementById("confirmationMessage");
   if (confirmationMessage) confirmationMessage.style.display = "";
 
+  syncProfileContactFields();
   syncSitePreferenceUi().catch(() => {});
 }
 
@@ -2073,6 +2084,7 @@ async function applyDynamicLanguageContent(target) {
   if (document.getElementById("confirmation")?.classList.contains("active")) {
     await updateConfirmationMessage();
     syncSettingsChannelButtons();
+    syncProfileContactFields();
     await syncSitePreferenceUi();
   }
   if (document.getElementById("subscribe")?.classList.contains("active")) {
@@ -2237,6 +2249,7 @@ function openModalStep(step) {
       if (confirmationMessage) {
         confirmationMessage.style.display = prototypeState.subscription_active ? "none" : "";
       }
+      syncProfileContactFields();
       await syncSitePreferenceUi();
     }
     await updateModalProgressTitle(getActiveReaderLang());
@@ -3159,6 +3172,15 @@ async function askForMissingContact(channel) {
   return true;
 }
 
+function syncProfileContactFields() {
+  const phoneInput = document.getElementById("settingsPhone");
+  const emailInput = document.getElementById("settingsEmail");
+  if (!phoneInput || !emailInput) return;
+
+  phoneInput.value = prototypeState.phone || "+46";
+  emailInput.value = prototypeState.email || "";
+}
+
 function syncSettingsChannelButtons() {
   const group = document.querySelector('[data-choice-group="settingsChannel"]');
   const messageElement = document.getElementById("settingsChannelMessage");
@@ -3179,6 +3201,90 @@ function syncSettingsChannelButtons() {
   }
 }
 
+async function saveProfileContact() {
+  const lang = getActiveReaderLang();
+  const phoneInput = document.getElementById("settingsPhone");
+  const emailInput = document.getElementById("settingsEmail");
+  if (!phoneInput || !emailInput) return;
+
+  const previousPhone = normalizePhoneForApi(prototypeState.phone || "");
+  const newPhone = normalizePhoneForApi(phoneInput.value.trim());
+  const previousEmail = (prototypeState.email || "").trim().toLowerCase();
+  const newEmail = emailInput.value.trim().toLowerCase();
+
+  if (!newPhone || newPhone.length < 8 || isPlaceholderContact(newPhone)) {
+    toast(await translateUiText("Ange ett giltigt mobilnummer.", lang));
+    return;
+  }
+
+  if (newEmail && (!newEmail.includes("@") || isPlaceholderContact(newEmail))) {
+    toast(await translateUiText("Ange en giltig e-postadress.", lang));
+    return;
+  }
+
+  if (prototypeState.channel === "email" && !newEmail) {
+    toast(await translateUiText("E-postnotiser kräver en giltig e-postadress.", lang));
+    return;
+  }
+
+  const phoneChanged = newPhone !== previousPhone;
+  const emailChanged = newEmail !== previousEmail;
+
+  if (!phoneChanged && !emailChanged) {
+    toast(await translateUiText("Inga ändringar att spara.", lang));
+    return;
+  }
+
+  const payload = buildPreferencesPayload({
+    ...(phoneChanged ? { new_phone: newPhone } : {}),
+    ...(emailChanged && newEmail ? { email: newEmail } : {}),
+  });
+
+  logApiPayload(
+    "Uppdaterar kontaktuppgifter",
+    API_ENDPOINTS.updatePreferences,
+    payload
+  );
+
+  try {
+    const { response, data } = await fetchApiJson(
+      API_ENDPOINTS.updatePreferences,
+      {
+        method: "PATCH",
+        headers: apiRequestHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      const detail = await readApiError(response, data);
+      if (response.status === 409) {
+        toast(await translateUiText("Mobilnummeret används redan.", lang));
+      } else {
+        toast(`Kunde inte spara kontaktuppgifter: ${detail}`);
+      }
+      return;
+    }
+
+    if (phoneChanged) {
+      prototypeState.phone = data.phone || newPhone;
+      if (!prototypeState.user_id || String(prototypeState.user_id) === previousPhone) {
+        prototypeState.user_id = data.user_id || prototypeState.user_id || newPhone;
+      }
+    }
+
+    if (emailChanged) {
+      prototypeState.email = newEmail;
+    }
+
+    syncProfileContactFields();
+    toast(await translateUiText(I18N_SV.CONTACT_SAVED, lang));
+  } catch (error) {
+    console.warn("saveProfileContact misslyckades:", error);
+    toast("Kunde inte nå API – kontrollera att servern körs.");
+  }
+}
+
 async function updateSettingsChannel(element, channel) {
   const previousChannel = prototypeState.channel;
 
@@ -3190,6 +3296,7 @@ async function updateSettingsChannel(element, channel) {
       syncSettingsChannelButtons();
       return;
     }
+    syncProfileContactFields();
   }
 
   prototypeState.channel = channel;
@@ -3646,6 +3753,8 @@ window.paymentComplete = paymentComplete;
 window.markSiteAsVisited = markSiteAsVisited;
 window.resetSiteNotifications = resetSiteNotifications;
 window.syncSitePreferenceUi = syncSitePreferenceUi;
+window.syncProfileContactFields = syncProfileContactFields;
+window.saveProfileContact = saveProfileContact;
 window.cancelSubscription = cancelSubscription;
 window.previewNotificationPayload = previewNotificationPayload;
 window.updateContactField = updateContactField;

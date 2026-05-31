@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=57" />
+  <link rel="stylesheet" href="css/style.css?v=58" />
 </head>
 <body>
   <div class="app-shell">
@@ -356,6 +356,17 @@
                 </div>
 
                 <div class="settings-row">
+                  <h3 data-i18n>KONTAKTUPPGIFTER</h3>
+                  <div class="settings-contact-form">
+                    <label for="settingsPhone" data-i18n>Mobilnummer</label>
+                    <input id="settingsPhone" type="tel" value="+46" autocomplete="tel" />
+                    <label for="settingsEmail" data-i18n>E-postadress</label>
+                    <input id="settingsEmail" type="email" autocomplete="email" placeholder="namn@example.com" />
+                    <button type="button" class="secondary-btn full-width" data-i18n onclick="saveProfileContact()">Spara kontaktuppgifter</button>
+                  </div>
+                </div>
+
+                <div class="settings-row">
                   <h3 data-i18n>BETALNINGSINFORMATION</h3>
                   <div class="payment-box" data-i18n>Betalning via Stripe (Visa/Mastercard). Ingen automatisk förnyelse.</div>
                   <button class="secondary-btn full-width" data-i18n onclick="openModalStep('payment')">Ändra betalningsmetod</button>
@@ -395,6 +406,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=98"></script>
+  <script src="js/app.js?v=99"></script>
 </body>
 </html>

@@ -287,6 +287,7 @@ class AuthTokenResponse(BaseModel):
 class UserPreferencesRequest(BaseModel):
     user_id: Optional[str] = None
     phone: Optional[str] = None
+    new_phone: Optional[str] = None
     email: Optional[EmailStr] = None
     notification_channel: Optional[str] = None
     notifications_paused: Optional[bool] = None
@@ -300,6 +301,7 @@ class UserPreferencesResponse(BaseModel):
     success: bool = True
     user_id: str
     phone: Optional[str] = None
+    email: Optional[str] = None
     preferred_language: Optional[str] = "sv"
     notifications_paused: bool = False
     home_radius_km: float = 5.0

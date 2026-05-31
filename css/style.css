@@ -1018,6 +1018,26 @@
       letter-spacing: 0.4px;
     }
 
+    .settings-contact-form {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: min(100%, 340px);
+      margin: 0 auto;
+    }
+
+    .settings-contact-form label {
+      margin-top: 10px;
+    }
+
+    .settings-contact-form label:first-of-type {
+      margin-top: 0;
+    }
+
+    .settings-contact-form .secondary-btn {
+      margin-top: 14px;
+    }
+
     .cancelled-box {
       padding: 20px;
       border: 2px solid #e58c8c;

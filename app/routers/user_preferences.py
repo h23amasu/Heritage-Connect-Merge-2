@@ -50,6 +50,7 @@ def get_preferences(
             success=True,
             user_id=str(user.id),
             phone=user.phone_number,
+            email=user.email,
             preferred_language=user.preferred_language,
             notifications_paused=user.notifications_paused,
             home_radius_km=user.home_radius_km or 5.0,
@@ -87,6 +88,17 @@ def update_preferences(
             user.preferred_language = body.preferred_language
         if body.email and "@" in body.email:
             user.email = body.email.strip().lower()
+        if body.new_phone:
+            normalized = normalize_phone(body.new_phone)
+            if normalized != user.phone_number:
+                conflict = (
+                    db.query(User)
+                    .filter(User.phone_number == normalized, User.id != user.id)
+                    .first()
+                )
+                if conflict:
+                    raise HTTPException(status_code=409, detail="Phone number already registered")
+                user.phone_number = normalized
         if body.notification_channel in ("sms", "email"):
             if hasattr(user, "notification_channel"):
                 user.notification_channel = body.notification_channel
@@ -128,7 +140,9 @@ def update_preferences(
             d["notification_channel"] = body.notification_channel
         if body.email:
             d["email"] = body.email.strip().lower()
-        if body.phone:
+        if body.new_phone:
+            d["phone"] = normalize_phone(body.new_phone)
+        elif body.phone:
             d["phone"] = normalize_phone(body.phone)
         if body.visited is not None and body.site_id:
             notify_user = d.get("phone") or key
@@ -142,6 +156,7 @@ def update_preferences(
             success=True,
             user_id=key,
             phone=d.get("phone") or key,
+            email=d.get("email") or None,
             notifications_paused=d.get("notifications_paused", False),
             notification_channel=d.get("notification_channel", "sms"),
             demo_mode=True,
