@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Heritage Connect – interaktiv prototyp</title>
-  <link rel="stylesheet" href="css/style.css?v=58" />
+  <link rel="stylesheet" href="css/style.css?v=59" />
 </head>
 <body>
   <div class="app-shell">
@@ -353,11 +353,9 @@
                     <div class="choice" data-channel="email" onclick="updateSettingsChannel(this, 'email')"><span data-i18n>✉️ E-postnotiser</span></div>
                   </div>
                   <div class="small-muted" id="settingsChannelMessage" data-i18n>Aktiv kanal: SMS-notiser</div>
-                </div>
 
-                <div class="settings-row">
-                  <h3 data-i18n>KONTAKTUPPGIFTER</h3>
-                  <div class="settings-contact-form">
+                  <p class="settings-subheading" data-i18n>KONTAKTUPPGIFTER</p>
+                  <div class="settings-contact-form settings-contact-form--boxed">
                     <label for="settingsPhone" data-i18n>Mobilnummer</label>
                     <input id="settingsPhone" type="tel" value="+46" autocomplete="tel" />
                     <label for="settingsEmail" data-i18n>E-postadress</label>
@@ -406,6 +404,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=99"></script>
+  <script src="js/app.js?v=100"></script>
 </body>
 </html>

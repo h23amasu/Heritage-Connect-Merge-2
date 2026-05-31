@@ -2251,6 +2251,9 @@ function openModalStep(step) {
       }
       syncProfileContactFields();
       await syncSitePreferenceUi();
+      window.requestAnimationFrame(() => {
+        document.querySelector(".settings-contact-form")?.scrollIntoView({ block: "nearest" });
+      });
     }
     await updateModalProgressTitle(getActiveReaderLang());
 
