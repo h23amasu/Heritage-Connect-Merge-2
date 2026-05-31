@@ -1078,43 +1078,75 @@
       display: none;
     }
 
+    .settings-row--preferences {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
     .preference-actions {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
+      width: 100%;
     }
 
-    .preference-box {
+    .service-modal .preference-actions .preference-box {
       display: block;
       width: 100%;
       min-width: min(100%, 240px);
       max-width: min(100%, 340px);
       margin-left: auto;
       margin-right: auto;
-      padding: 12px 18px;
-      min-height: 44px;
-      border: 2px solid #e58c8c;
+      padding: 10px 14px;
+      min-height: 42px;
       border-radius: 12px;
-      background: var(--danger-bg);
-      color: var(--danger);
       font-weight: 600;
-      font-size: 1rem;
+      font-size: 0.92rem;
+      line-height: 1.35;
       text-align: center;
       cursor: pointer;
       box-sizing: border-box;
       font-family: inherit;
+      white-space: normal;
     }
 
-    .preference-box--resume {
-      border-color: #86efac;
+    .service-modal .preference-actions .preference-box--mark {
+      border: 2px solid #e58c8c;
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .service-modal .preference-actions .preference-box--resume {
+      border: 2px solid #22c55e;
       background: var(--success-bg);
       color: var(--success);
     }
 
-    .preference-box:disabled {
-      opacity: 0.55;
+    .service-modal .preference-actions .preference-box--mark:not(:disabled):hover {
+      background: #ffe4e4;
+    }
+
+    .service-modal .preference-actions .preference-box--resume:not(:disabled):hover {
+      background: #d1fae5;
+    }
+
+    .service-modal .preference-actions .preference-box:disabled {
+      opacity: 1;
       cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .service-modal .preference-actions .preference-box--mark:disabled {
+      border-color: #fca5a5;
+      background: #fff1f1;
+      color: #b45353;
+    }
+
+    .service-modal .preference-actions .preference-box--resume:disabled {
+      border-color: #86efac;
+      background: #ecfdf5;
+      color: #059669;
     }
 
     .info-box {

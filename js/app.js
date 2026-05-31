@@ -1750,6 +1750,9 @@ function resetDemoState() {
   setElementI18n(document.getElementById("confirmationMessage"), I18N_SV.CONFIRM_CHANNEL).catch(() => {});
   setElementI18n(document.getElementById("settingsChannelMessage"), I18N_SV.ACTIVE_SMS).catch(() => {});
 
+  const confirmationMessage = document.getElementById("confirmationMessage");
+  if (confirmationMessage) confirmationMessage.style.display = "";
+
   syncSitePreferenceUi().catch(() => {});
 }
 
@@ -2230,6 +2233,10 @@ function openModalStep(step) {
       await prepareStripePaymentStep();
     }
     if (step === "confirmation") {
+      const confirmationMessage = document.getElementById("confirmationMessage");
+      if (confirmationMessage) {
+        confirmationMessage.style.display = prototypeState.subscription_active ? "none" : "";
+      }
       await syncSitePreferenceUi();
     }
     await updateModalProgressTitle(getActiveReaderLang());
@@ -3219,6 +3226,12 @@ async function syncSitePreferenceUi() {
   const visited = isCurrentSiteMarkedVisited();
   markBtn.disabled = visited;
   resetBtn.disabled = !visited;
+  markBtn.classList.toggle("is-active", !visited);
+  markBtn.classList.toggle("is-inactive", visited);
+  resetBtn.classList.toggle("is-active", visited);
+  resetBtn.classList.toggle("is-inactive", !visited);
+  markBtn.setAttribute("aria-pressed", visited ? "true" : "false");
+  resetBtn.setAttribute("aria-pressed", visited ? "false" : "true");
 
   await setElementI18n(markBtn, I18N_SV.PREF_MARK_VISITED);
   await setElementI18n(resetBtn, I18N_SV.PREF_WANT_SMS_AGAIN);
