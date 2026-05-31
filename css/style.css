@@ -28,6 +28,10 @@
       line-height: 1.45;
     }
 
+    body.modal-open {
+      overflow: hidden;
+    }
+
     .app-shell {
       min-height: 100vh;
       padding: 20px;
@@ -628,7 +632,25 @@
 
     .service-modal-body {
       padding: 18px;
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .modal-step {
+      display: none;
+    }
+
+    .modal-step.active {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      animation: fadeIn 150ms ease-in-out;
     }
 
     .service-modal .action-stack {
@@ -691,15 +713,6 @@
     .modal-close:hover {
       background: #dbe4ee;
       color: var(--text);
-    }
-
-    .modal-step {
-      display: none;
-    }
-
-    .modal-step.active {
-      display: block;
-      animation: fadeIn 150ms ease-in-out;
     }
 
     @keyframes fadeIn {

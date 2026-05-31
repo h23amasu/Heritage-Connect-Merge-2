@@ -2217,6 +2217,7 @@ function openServiceModal(step = "detail") {
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
   void openModalStep(step);
 }
 
@@ -2226,6 +2227,7 @@ function closeServiceModal() {
 
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
 
   const stepLabel = document.getElementById("stepLabel");
   if (stepLabel) {
@@ -2235,11 +2237,25 @@ function closeServiceModal() {
   resetDemoState();
 }
 
-function scrollModalToTop() {
+function scrollModalToTop(stepElement) {
   const body = document.querySelector(".service-modal-body");
+  const step = stepElement || document.querySelector(".modal-step.active");
+
   if (body) {
     body.scrollTop = 0;
   }
+  if (step) {
+    step.scrollTop = 0;
+    step.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
+
+  window.requestAnimationFrame(() => {
+    if (body) body.scrollTop = 0;
+    if (step) {
+      step.scrollTop = 0;
+      step.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+  });
 }
 
 function openModalStep(step) {
@@ -2256,7 +2272,7 @@ function openModalStep(step) {
   }
 
   target.classList.add("active");
-  scrollModalToTop();
+  scrollModalToTop(target);
 
   const run = async () => {
     if (step === "payment") {
@@ -2272,7 +2288,7 @@ function openModalStep(step) {
       syncProfileContactFields();
       await syncSitePreferenceUi();
     }
-    scrollModalToTop();
+    scrollModalToTop(target);
     await updateModalProgressTitle(getActiveReaderLang());
 
     const stepLabel = document.getElementById("stepLabel");
