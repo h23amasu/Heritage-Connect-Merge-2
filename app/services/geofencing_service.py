@@ -15,7 +15,7 @@ from app.models.site import WorldHeritageSite
 from app.models.subscription import Subscription
 from app.models.payment import UserVisitedSite
 from app.schemas import NotificationRequest
-from app.services.message_builder import build_near_site_sms
+from app.services.message_builder import build_near_site_email, build_near_site_sms
 from app.services.notification_service import (
     check_cooldown,
     dispatch_notification,
@@ -194,27 +194,48 @@ def process_location_update(
         return result
 
     lang = user.preferred_language or "sv"
+    channel = (user.notification_channel or "sms").lower()
     unesco_id = getattr(site, "unesco_id", None)
-    message = build_near_site_sms(
-        site.name,
-        site.id,
-        lang,
-        unesco_id=str(unesco_id) if unesco_id else None,
-    )
-    notification = NotificationRequest(
-        channel="sms",
-        to=user.phone_number,
-        message=message,
-        user_id=str(user.id),
-        site_id=str(site.id),
-    )
+    if channel == "email":
+        recipient = (user.email or "").strip().lower()
+        if not recipient:
+            result["reason"] = "notification_recipient_missing"
+            return result
+        subject, body = build_near_site_email(
+            site.name,
+            site.id,
+            lang,
+            unesco_id=str(unesco_id) if unesco_id else None,
+        )
+        notification = NotificationRequest(
+            channel="email",
+            to=recipient,
+            subject=subject,
+            message=body,
+            user_id=str(user.id),
+            site_id=str(site.id),
+        )
+    else:
+        message = build_near_site_sms(
+            site.name,
+            site.id,
+            lang,
+            unesco_id=str(unesco_id) if unesco_id else None,
+        )
+        notification = NotificationRequest(
+            channel="sms",
+            to=user.phone_number,
+            message=message,
+            user_id=str(user.id),
+            site_id=str(site.id),
+        )
 
     if check_cooldown(notification):
         result["reason"] = "cooldown"
         return result
 
     if not dispatch_notification(notification):
-        result["reason"] = "sms_delivery_failed"
+        result["reason"] = f"{channel}_delivery_failed"
         return result
 
     record_cooldown(notification)
@@ -224,5 +245,5 @@ def process_location_update(
     db.commit()
 
     result["notified"] = True
-    result["notification"] = {"channel": "sms", "site_id": site.id}
+    result["notification"] = {"channel": channel, "site_id": site.id}
     return result

@@ -1,25 +1,25 @@
 """
-Prenumeration utan PostgreSQL – för demo (GEOFENCING_DEMO_MODE).
+Prenumeration utan PostgreSQL - for demo (GEOFENCING_DEMO_MODE).
 """
+import zlib
 from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi import BackgroundTasks
 
+from app.clients.remote_services import deliver_notification_message
 from app.schemas import (
+    NotificationRequest,
     SubscriptionCancelRequest,
     SubscriptionFlowCreateRequest,
     SubscriptionFlowResponse,
     SubscriptionPauseRequest,
 )
-import zlib
-
 from app.services.auth_service import normalize_phone
-from app.clients.remote_services import deliver_notification_message
 from app.services.geofencing_demo import _demo_users, reset_demo_geofencing_user
-from app.schemas import NotificationRequest
-from app.services.receipt_service import send_subscription_receipt
+from app.services.message_builder import build_subscription_confirmation
 from app.services.payment_service import process_payment
+from app.services.receipt_service import send_subscription_receipt
 
 _demo_subscriptions: dict[str, dict] = {}
 
@@ -33,7 +33,11 @@ def _confirmation_email(body: SubscriptionFlowCreateRequest, channel: str) -> st
     return (body.email or (body.to if channel == "email" else "") or "").strip().lower()
 
 
-def _phone_for_confirmation(body: SubscriptionFlowCreateRequest, channel: str, user_key: str) -> str:
+def _phone_for_confirmation(
+    body: SubscriptionFlowCreateRequest,
+    channel: str,
+    user_key: str,
+) -> str:
     if channel == "sms":
         return user_key
     explicit = (body.phone or "").strip()
@@ -44,7 +48,7 @@ def _phone_for_confirmation(body: SubscriptionFlowCreateRequest, channel: str, u
 
 
 def _subscription_user_key(body: SubscriptionFlowCreateRequest) -> str:
-    """Unik nyckel för demo – telefon eller e-post beroende på kanal."""
+    """Unik nyckel for demo - telefon eller e-post beroende pa kanal."""
     channel = (body.channel or "sms").lower()
     if channel == "email":
         email = (body.email or body.to or "").strip().lower()
@@ -93,20 +97,18 @@ def create_demo_subscription(
     if confirm_email:
         _demo_users[user_key]["email"] = confirm_email
 
-    if channel == "sms" and background_tasks:
-        confirmation = NotificationRequest(
-            channel="sms",
-            to=user_key,
-            message=(
-                "Din Heritage Connect-prenumeration är aktiv. "
-                "Fullständig bekräftelse med OwnTracks-instruktioner skickas till din e-post."
-                if confirm_email
-                else "Din Heritage Connect-prenumeration är nu aktiv. "
-                "Du får notiser om världsarv nära dig."
-            ),
-            user_id=user_key,
-        )
-        background_tasks.add_task(deliver_notification_message, confirmation)
+    if background_tasks:
+        subject, message = build_subscription_confirmation(body.language or "sv", channel)
+        recipient = user_key if channel == "sms" else confirm_email
+        if recipient:
+            confirmation = NotificationRequest(
+                channel=channel,
+                to=recipient,
+                subject=subject,
+                message=message,
+                user_id=user_key,
+            )
+            background_tasks.add_task(deliver_notification_message, confirmation)
 
     _demo_subscriptions[user_key] = {
         "subscription_id": 1,

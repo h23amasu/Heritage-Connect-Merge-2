@@ -9,7 +9,7 @@ from typing import Any
 from app.services.auth_service import normalize_phone
 from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site
-from app.services.message_builder import build_near_site_sms
+from app.services.message_builder import build_near_site_email, build_near_site_sms
 from app.clients.remote_services import deliver_notification_message
 from app.services.cooldown_service import cooldown_service
 from app.schemas import NotificationRequest
@@ -108,8 +108,12 @@ def process_location_demo(
         return result
 
     channel = (user.get("notification_channel") or "sms").lower()
-    if channel != "sms":
-        result["reason"] = "notification_channel_not_sms"
+    recipient = user_key if channel == "sms" else (user.get("email") or "").strip().lower()
+    if channel not in ("sms", "email"):
+        result["reason"] = "notification_channel_invalid"
+        return result
+    if not recipient:
+        result["reason"] = "notification_recipient_missing"
         return result
 
     home_was_unset = user["home_lat"] is None
@@ -151,31 +155,48 @@ def process_location_demo(
         result["reason"] = "already_notified"
         return result
 
-    notification = NotificationRequest(
-        channel="sms",
-        to=user_key,
-        message=build_near_site_sms(
+    if channel == "email":
+        subject, body = build_near_site_email(
             site_name,
             unesco_id,
             lang,
             unesco_id=unesco_id,
             localized_name=localized_name,
-        ),
-        user_id=user_key,
-        site_id=unesco_id,
-    )
+        )
+        notification = NotificationRequest(
+            channel="email",
+            to=recipient,
+            subject=subject,
+            message=body,
+            user_id=user_key,
+            site_id=unesco_id,
+        )
+    else:
+        notification = NotificationRequest(
+            channel="sms",
+            to=recipient,
+            message=build_near_site_sms(
+                site_name,
+                unesco_id,
+                lang,
+                unesco_id=unesco_id,
+                localized_name=localized_name,
+            ),
+            user_id=user_key,
+            site_id=unesco_id,
+        )
 
     if _geo_cooldown_active(notification):
         result["reason"] = "cooldown"
         return result
 
     if not deliver_notification_message(notification):
-        result["reason"] = "sms_delivery_failed"
+        result["reason"] = f"{channel}_delivery_failed"
         return result
 
     _record_geo_cooldown(notification)
     _demo_notified.add(notify_key)
 
     result["notified"] = True
-    result["notification"] = {"channel": "sms", "site_id": unesco_id}
+    result["notification"] = {"channel": channel, "site_id": unesco_id}
     return result
