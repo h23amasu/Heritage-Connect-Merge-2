@@ -456,78 +456,136 @@ function translationSucceeded(source, translated) {
   return Boolean(s) && s !== t;
 }
 
+function adDescriptionSource(site, targetLang) {
+  const target = normalizeLanguageCode(targetLang);
+  const english = englishDescriptionForSite(site);
+  if (target === "en") {
+    return { text: english, needsTranslate: false };
+  }
+  const bundled = getUnescoDescription(site, target);
+  if (bundled && bundled.length >= 120) {
+    return { text: bundled, needsTranslate: false };
+  }
+  return { text: english, needsTranslate: Boolean(english) };
+}
+
+function translateApiUrls(path = "/api/translate") {
+  const urls = [];
+  if (typeof window !== "undefined" && window.location?.origin) {
+    urls.push(`${window.location.origin}${path}`);
+  }
+  const configured =
+    path === "/api/translate/batch" ? API_ENDPOINTS.translateBatch : API_ENDPOINTS.translate;
+  if (configured && !urls.includes(configured)) {
+    urls.push(configured);
+  }
+  return urls;
+}
+
+/** UNESCO/API-översättning – använder aldrig svenska UI-ordboken. */
+async function translateRemoteText(text, targetLang, sourceLang = "en") {
+  const target = normalizeLanguageCode(targetLang);
+  const source = normalizeLanguageCode(sourceLang);
+  if (!text?.trim() || target === source) {
+    return text?.trim() || "";
+  }
+
+  const cacheKey = `${source}|${target}|${text}`;
+  const cached = translateCache.get(cacheKey);
+  if (cached && translationSucceeded(text, cached)) {
+    return cached;
+  }
+
+  const body = JSON.stringify({
+    text,
+    source_language: source,
+    target_language: target
+  });
+  const timeoutMs = text.length > 400 ? 30000 : 15000;
+
+  if (backendTranslateAvailable) {
+    for (const url of translateApiUrls("/api/translate")) {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: apiRequestHeaders(),
+          body,
+          signal: controller.signal
+        });
+        window.clearTimeout(timeoutId);
+        const data = await response.json();
+        if (response.ok && data.translated_text?.trim()) {
+          const translated = data.translated_text.trim();
+          if (translationSucceeded(text, translated)) {
+            translateCache.set(cacheKey, translated);
+            return translated;
+          }
+        }
+        if (response.status === 400 && data?.error === "invalid_language_code") {
+          backendTranslateAvailable = false;
+          break;
+        }
+      } catch (error) {
+        window.clearTimeout(timeoutId);
+        console.warn("UNESCO-översättning misslyckades:", url, error);
+      }
+    }
+  }
+
+  const mem = await translateViaMyMemory(text, target, source);
+  if (mem && translationSucceeded(text, mem)) {
+    translateCache.set(cacheKey, mem);
+    return mem;
+  }
+
+  return null;
+}
+
 /**
- * Översätter annonsens UNESCO-text (namn, fakta, land) från engelska till läsarens språk.
- * Visar aldrig engelska som fallback när målspråk ≠ en.
+ * Översätter annonsens UNESCO-text till läsarens språk.
+ * Fakta: inbyggd desc_xx om tillräckligt lång, annars en→mål via /api/translate (samma origin först).
  */
 async function translateAdHeritageContent(site, targetLang, rawSite = null) {
   const target = normalizeLanguageCode(targetLang);
   const englishName = (site?.name || "").trim();
-  const englishDesc = englishDescriptionForSite(site);
   const englishCountry = (site?.country || rawSite?.country || "").trim();
+  const descSource = adDescriptionSource(site, target);
 
   if (target === "en") {
     return {
       name: englishName,
-      description: englishDesc,
+      description: descSource.text,
       country: englishCountry,
       failed: false
     };
   }
 
-  const fields = [];
-  if (englishName) fields.push({ key: "name", text: englishName });
-  if (englishDesc) fields.push({ key: "description", text: englishDesc });
-  if (englishCountry) fields.push({ key: "country", text: englishCountry });
-
-  const uniqueTexts = [...new Set(fields.map(f => f.text))];
-  let map = {};
-  if (uniqueTexts.length) {
-    map = await translateBatchMap(uniqueTexts, target, "en");
+  const localizedName = getUnescoSiteName(site, target);
+  let name = localizedName || "";
+  if (!name && englishName) {
+    name = (await translateRemoteText(englishName, target, "en")) || englishName;
   }
 
-  const out = { name: "", description: "", country: "", failed: false };
-
-  for (const { key, text } of fields) {
-    let translated = map[text];
-    if (!translationSucceeded(text, translated)) {
-      translated = await translateMandatory(text, target, "en");
-    }
-    if (key === "country") {
-      if (translated) out.country = translated;
-      continue;
-    }
-    if (!translated) {
-      out.failed = true;
-      continue;
-    }
-    out[key] = translated;
+  let description = descSource.text;
+  if (descSource.needsTranslate) {
+    description = (await translateRemoteText(descSource.text, target, "en")) || "";
   }
 
-  return out;
-}
-
-async function translateMandatory(text, targetLang, sourceLang = "en") {
-  const target = normalizeLanguageCode(targetLang);
-  const source = normalizeLanguageCode(sourceLang);
-  if (!text?.trim()) return "";
-  if (target === source) return text.trim();
-
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const api = await translateViaApi(text, target, source);
-    if (translationSucceeded(text, api)) {
-      return api.trim();
-    }
+  let country = englishCountry;
+  if (englishCountry) {
+    country = (await translateRemoteText(englishCountry, target, "en")) || englishCountry;
   }
 
-  const mem = await translateViaMyMemory(text, target, source);
-  if (translationSucceeded(text, mem)) {
-    const cacheKey = `${source}|${target}|${text}`;
-    translateCache.set(cacheKey, mem);
-    return mem.trim();
-  }
+  const failed = descSource.needsTranslate && Boolean(descSource.text) && !description?.trim();
 
-  return null;
+  return {
+    name: name || englishName,
+    description,
+    country,
+    failed
+  };
 }
 
 async function resolveSiteCountry(country, targetLang = getActiveReaderLang()) {
@@ -2036,11 +2094,13 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
       result[text] = translateCache.get(cacheKey);
       continue;
     }
-    const offline = resolveI18nText(text, target, source);
-    if (offline) {
-      translateCache.set(cacheKey, offline);
-      result[text] = offline;
-      continue;
+    if (source === "sv") {
+      const offline = resolveI18nText(text, target, source);
+      if (offline) {
+        translateCache.set(cacheKey, offline);
+        result[text] = offline;
+        continue;
+      }
     }
     pending.push(text);
   }
@@ -2050,22 +2110,37 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
   }
 
   if (backendTranslateAvailable) {
+    const batchBody = JSON.stringify({
+      texts: pending,
+      source_language: source,
+      target_language: target
+    });
+    for (const url of translateApiUrls("/api/translate/batch")) {
     try {
-      const response = await fetch(API_ENDPOINTS.translateBatch, {
+      const response = await fetch(url, {
         method: "POST",
         headers: apiRequestHeaders(),
-        body: JSON.stringify({
-          texts: pending,
-          source_language: source,
-          target_language: target
-        })
+        body: batchBody
       });
       const data = await response.json();
       if (response.ok && Array.isArray(data.translations)) {
         pending.forEach((text, idx) => {
-          const translated = data.translations[idx] || text;
-          translateCache.set(`${source}|${target}|${text}`, translated);
+          const translated = data.translations[idx];
+          if (translationSucceeded(text, translated)) {
+            translateCache.set(`${source}|${target}|${text}`, translated);
+            result[text] = translated;
+          }
+        });
+        const stillPending = pending.filter(text => !result[text]);
+        if (stillPending.length === 0) {
+          return result;
+        }
+        await translateInParallel(stillPending, async text => {
+          const translated =
+            (await translateRemoteText(text, target, source)) ||
+            (await translateViaApi(text, target, source));
           result[text] = translated;
+          return translated;
         });
         return result;
       }
@@ -2073,12 +2148,17 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
         backendTranslateAvailable = false;
       }
     } catch (error) {
-      console.warn("Batch-översättning misslyckades:", error);
+      console.warn("Batch-översättning misslyckades:", url, error);
+    }
     }
   }
 
   await translateInParallel(pending, async text => {
-    const translated = await translateViaApi(text, target, source);
+    const translated =
+      source === "sv"
+        ? await translateViaApi(text, target, source)
+        : (await translateRemoteText(text, target, source)) ||
+          (await translateViaApi(text, target, source));
     result[text] = translated;
     return translated;
   });
@@ -2148,10 +2228,17 @@ async function translateViaApi(text, targetLang, sourceLang = "sv") {
     return translateCache.get(cacheKey);
   }
 
-  const offline = resolveI18nText(text, target, source);
-  if (offline) {
-    translateCache.set(cacheKey, offline);
-    return offline;
+  if (source === "sv") {
+    const offline = resolveI18nText(text, target, source);
+    if (offline) {
+      translateCache.set(cacheKey, offline);
+      return offline;
+    }
+  } else if (source !== target) {
+    const remote = await translateRemoteText(text, target, source);
+    if (remote) {
+      return remote;
+    }
   }
 
   if (backendTranslateAvailable) {
@@ -3958,7 +4045,6 @@ async function bootstrapApp() {
     }
   }
 
-  renderClosestSiteNow();
   await loadHeritageSites();
   await refreshGeoFromApi();
 
@@ -3985,7 +4071,7 @@ async function bootstrapApp() {
   }
 }
 
-renderClosestSiteNow();
+void showGeoLoadingState();
 initApiSettings();
 initGeoDemoControls();
 initDemoLanguageSelect();
