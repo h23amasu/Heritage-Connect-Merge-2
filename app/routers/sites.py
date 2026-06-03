@@ -2,7 +2,6 @@
 Router: World Heritage Sites
 Handles every endpoint related to heritage sites.
 """
-from functools import lru_cache
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -15,47 +14,31 @@ from app.models.site import WorldHeritageSite
 from app.schemas import SiteCreate, SiteResponse
 from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site, find_site_by_ref
-from app.services.translate_service import translate_text
 from app.services.unesco_service import get_cached_sites
 
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
 
-@lru_cache(maxsize=512)
-def _cached_translate_field(text: str, source_lang: str, target_lang: str) -> str:
-    """Cachad översättning – undviker upprepade Google-anrop som kan hänga Railway."""
-    if not text or source_lang == target_lang:
-        return text or ""
-    snippet = text[:1500]
-    try:
-        translated = translate_text(snippet, source_lang, target_lang)
-    except Exception:
-        return text
-    if translated and translated.strip() and translated.strip() != snippet.strip():
-        return translated.strip()
-    return text
-
-
 def _localized_site_fields(site: dict, lang: str = "sv") -> tuple[str, str, str]:
-    """Namn, beskrivning och land på läsarens språk (UNESCO-fält + en översättning vid behov)."""
+    """Namn, beskrivning och land på läsarens språk."""
     lang = (lang or "sv").lower()[:2]
     name = (site.get("name") or "").strip()
     country = (site.get("country") or "").strip()
     description = _best_site_description(site, lang)
-    desc_en = (site.get("desc_en") or site.get("description") or "").strip()
-
-    if lang == "en":
-        return name, description or desc_en, country
 
     localized_name = (site.get(f"name_{lang}") or "").strip()
     if localized_name:
         name = localized_name
 
-    # Endast fakta översätts på servern (snabbare, mindre risk för timeout).
-    if desc_en and (not description or description.strip() == desc_en.strip()):
-        description = _cached_translate_field(desc_en, "en", lang)
+    return name, description, country
 
-    return name, description or desc_en, country
+
+def _site_text_fields(site: dict) -> dict:
+    return {
+        key: value
+        for key, value in site.items()
+        if key.startswith("desc_") or key.startswith("name_")
+    }
 
 
 def _demo_closest(lat: float, lng: float, lang: str = "sv") -> dict:
@@ -63,19 +46,19 @@ def _demo_closest(lat: float, lng: float, lang: str = "sv") -> dict:
     if not best:
         raise HTTPException(status_code=404, detail="No sites in demo data")
     uid = str(best.get("unesco_id") or best.get("id") or "")
-    name, description, country = _localized_site_fields(best, lang)
     return {
         "id": uid,
         "unesco_id": uid,
-        "name": name,
-        "description": description,
-        "country": country,
+        "name": best.get("name"),
+        "description": best.get("description"),
+        "country": best.get("country"),
         "category": best.get("category"),
         "latitude": best.get("latitude"),
         "longitude": best.get("longitude"),
         "image_url": best.get("image_url"),
         "year_inscribed": best.get("year_inscribed"),
         "distance_m": dist_km * 1000,
+        **_site_text_fields(best),
     }
 
 
@@ -135,6 +118,7 @@ def _cache_closest(lat: float, lng: float) -> Optional[dict]:
         "image_url": best.get("image_url"),
         "year_inscribed": best.get("year_inscribed"),
         "distance_m": best_dist,
+        **_site_text_fields(best),
     }
 
 
@@ -214,13 +198,14 @@ def get_nearby_sites(
 def get_closest_site(
     lat: float = Query(..., ge=-90, le=90),
     lng: float = Query(..., ge=-180, le=180),
+    lang: str = Query("sv", min_length=2, max_length=5),
     db: Session = Depends(get_db)
 ):
     """
     Hämtar närmaste världsarv. Används av annonsen (ingen registrering krävs).
     """
     if settings.GEOFENCING_DEMO_MODE:
-        return _demo_closest(lat, lng)
+        return _demo_closest(lat, lng, lang)
 
     try:
         user_point = ST_SetSRID(ST_MakePoint(lng, lat), 4326)
