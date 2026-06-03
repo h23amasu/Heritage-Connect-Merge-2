@@ -155,6 +155,22 @@ def test_ai_semantic_chunk_democracy_acropolis():
     assert "democracy" in data["answer"].lower()
 
 
+def test_ai_ask_grimeton_what_is():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1134,
+            "question": "vad är grimeton?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    assert "grimeton" in data["answer"].lower()
+    assert "lokala källorna" not in data["answer"].lower()
+
+
 def test_ai_ask_keyword_citation_from_description():
     response = client.post(
         "/api/ai/ask",

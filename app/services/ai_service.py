@@ -83,6 +83,25 @@ _QUESTION_STOP_WORDS = frozenset(
         "how",
         "why",
         "varför",
+        "vad",
+        "what",
+        "är",
+        "is",
+        "are",
+        "was",
+        "were",
+        "vem",
+        "who",
+        "vilken",
+        "vilket",
+        "vilka",
+        "which",
+        "berätta",
+        "tell",
+        "beskriv",
+        "describe",
+        "förklara",
+        "explain",
         "säger",
         "säga",
         "källorna",
@@ -546,7 +565,100 @@ def _sentence_relevance(sentence: str, question: str, words: list[str]) -> float
     return word_score * 2.0 + similarity
 
 
-def _cite_from_context(question: str, context: str, language: str) -> str:
+_INTRO_VAGUE_SUBJECTS = frozenset(
+    {
+        "unikt",
+        "unique",
+        "detta",
+        "denna",
+        "dette",
+        "platsen",
+        "site",
+        "världsarv",
+        "heritage",
+        "viktigt",
+        "important",
+        "särskilt",
+        "special",
+        "det",
+        "den",
+        "it",
+        "this",
+        "that",
+    }
+)
+
+
+def _asks_site_intro(question: str) -> bool:
+    """'Vad är Grimeton?' / 'What is the Parthenon?' – introduktion om platsen."""
+    q = (question or "").strip().lower()
+    if not q:
+        return False
+    if q in ("vad är det", "vad är detta", "what is this", "what is it"):
+        return False
+
+    what_is = re.search(
+        r"^(?:vad|what)\s+(?:är|is|are)\s+(?:(?:the|det|den)\s+)?([\wåäö-]+)",
+        q,
+    )
+    if what_is:
+        subject = what_is.group(1)
+        return subject not in _INTRO_VAGUE_SUBJECTS
+
+    return bool(
+        re.search(
+            r"^(?:berätta|beskriv|förklara|tell|describe|explain)\s+(?:om\s+)?[\wåäö-]+",
+            q,
+        )
+    )
+
+
+def _intro_from_context(
+    context: str, language: str, site: Optional[dict] = None
+) -> str:
+    """Första meningsfulla avsnittet – helst på läsarens språk."""
+    lang = _normalize_language(language)
+    if site:
+        localized, _ = _pick_site_description(site, lang)
+        if localized and len(localized) >= 40:
+            parts = _split_context_chunks(localized) or [localized]
+            joined = _join_sentences(parts[:2], max_sentences=2, language=lang)
+            if joined:
+                return joined
+
+    chunks = _split_context_chunks(context)
+    if not chunks:
+        return ""
+    ranked = sorted(
+        chunks,
+        key=lambda c: (
+            1 if re.search(r"brief synthesis|exceptionally|outstanding", c, re.I) else 0,
+            len(c),
+        ),
+        reverse=True,
+    )
+    return _join_sentences([ranked[0]], max_sentences=1, language=language)
+
+
+def _intro_subject_matches_site(question: str, site: dict) -> bool:
+    q = (question or "").strip().lower()
+    match = re.search(
+        r"^(?:vad|what)\s+(?:är|is|are)\s+(?:(?:the|det|den)\s+)?([\wåäö-]+)",
+        q,
+    )
+    if not match:
+        return False
+    subject = match.group(1).lower()
+    names = " ".join(
+        str(site.get(key) or "")
+        for key in ("name", "name_sv", "name_en")
+    ).lower()
+    return subject in names
+
+
+def _cite_from_context(
+    question: str, context: str, language: str, site: Optional[dict] = None
+) -> str:
     words = _question_words(question)
     if not words:
         return ""
@@ -558,8 +670,18 @@ def _cite_from_context(question: str, context: str, language: str) -> str:
         reverse=True,
     )
     hits = [s for s in ranked if _score_sentence(s, words) >= min_score]
+    if not hits and _asks_site_intro(question):
+        return _intro_from_context(context, language, site=site)
     if not hits:
         return ""
+    if (
+        _asks_site_intro(question)
+        and site
+        and _intro_subject_matches_site(question, site)
+    ):
+        intro = _intro_from_context(context, language, site=site)
+        if intro:
+            return intro
     return _join_sentences(hits[:3], language=language)
 
 
@@ -725,8 +847,13 @@ def ask_ai(
         if openai_result:
             return openai_result[0], sources, openai_result[1]
 
-    cited = _cite_from_context(question, context, language)
+    cited = _cite_from_context(question, context, language, site=site)
     if cited:
         return cited, sources, False
+
+    if intent == QuestionIntent.HERITAGE_CONTENT and _asks_site_intro(question):
+        intro = _intro_from_context(context, language, site=site)
+        if intro:
+            return intro, sources, False
 
     return _pick_language_fallback(language, "no_info"), sources, False
