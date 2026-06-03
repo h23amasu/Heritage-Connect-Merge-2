@@ -329,21 +329,49 @@ function getUnescoDescription(site, lang) {
   return text && String(text).trim() ? String(text).trim() : null;
 }
 
+/** Max tecken i annonsens faktatext (ingress). Detaljvyn visar hela texten. */
+const AD_FACT_MAX_CHARS = 480;
+
+function longestUnescoDescription(site) {
+  let best = (site?.description || "").trim();
+  let bestLang = "en";
+
+  for (const code of ["en", ...UNESCO_DESC_LANGS]) {
+    const text = getUnescoDescription(site, code);
+    if (text && text.length > best.length) {
+      best = text;
+      bestLang = code;
+    }
+  }
+
+  return { text: best, lang: bestLang };
+}
+
 function pickUnescoDescriptionSource(site, targetLang) {
   const target = normalizeLanguageCode(targetLang);
   const localized = getUnescoDescription(site, target);
   const english = englishDescriptionForSite(site);
+  const longest = longestUnescoDescription(site);
 
   if (target === "en") {
-    return { text: english || localized || "", lang: "en" };
+    const text = english || longest.text || localized || "";
+    return { text, lang: "en" };
   }
 
-  if (localized?.trim()) {
+  const referenceLen = Math.max(english.length, longest.text.length);
+  if (
+    localized?.trim() &&
+    (!referenceLen || localized.length >= referenceLen * 0.85)
+  ) {
     return { text: localized.trim(), lang: target };
   }
 
   if (english) {
     return { text: english, lang: "en" };
+  }
+
+  if (longest.text) {
+    return longest;
   }
 
   return { text: "", lang: target };
@@ -381,10 +409,10 @@ function formatAdTeaserText(description) {
     return "";
   }
   const trimmed = description.trim();
-  if (trimmed.length <= 180) {
+  if (trimmed.length <= AD_FACT_MAX_CHARS) {
     return trimmed;
   }
-  return `${trimmed.slice(0, 180).trimEnd()}…`;
+  return `${trimmed.slice(0, AD_FACT_MAX_CHARS).trimEnd()}…`;
 }
 
 /**

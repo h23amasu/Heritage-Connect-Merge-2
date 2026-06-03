@@ -95,7 +95,11 @@ def _extract_whc_description(item: dict) -> str:
     """Längsta tillgängliga UNESCO-beskrivning (öppna list-API:t varierar per fält)."""
     candidates = [
         item.get("long_description"),
+        item.get("description_long"),
         item.get("description"),
+        item.get("justification"),
+        item.get("statement"),
+        item.get("brief_description"),
         item.get("short_description"),
     ]
     best = ""
@@ -115,6 +119,7 @@ def _map_whc_item(item: dict) -> dict:
         "unesco_id": unesco_id,
         "name": item.get("site") or item.get("name") or "Unknown",
         "description": description,
+        "description_long": description,
         "desc_en": description,
         "country": item.get("states") or item.get("country") or "",
         "category": item.get("category") or "",
