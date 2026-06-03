@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # AI settings
     AI_PROVIDER: str = "mock"  # mock, openai or ollama
     OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Payment settings
     PAYMENT_PROVIDER: str = "mock"  # mock or stripe

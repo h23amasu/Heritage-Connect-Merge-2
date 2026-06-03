@@ -1,35 +1,56 @@
 """
 AI Service – svar enbart från lokala UNESCO-källor (PDF/txt), inte internet.
+
+Läser hela frågan (intent först), svarar sedan utifrån källor utan gissning.
+Med AI_PROVIDER=openai och OPENAI_API_KEY formuleras svaret naturligt men
+enbart utifrån samma lokala kontext.
 """
+from __future__ import annotations
+
+import logging
 import re
+from difflib import SequenceMatcher
+from enum import Enum
 from typing import List, Optional, Tuple
 
+import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.other import AIDocument
 from app.services.heritage_sites_local import find_site_by_ref
 from app.services.pdf_loader import load_local_documents
 
+logger = logging.getLogger(__name__)
+
 FALLBACK_NO_INFO_SV = (
-    "Jag har inte tillräcklig information i de lokala källorna för att svara på den frågan."
+    "Jag hittar inget tydligt svar på din fråga i de lokala källorna. "
+    "Prova att formulera om, t.ex. med ord som finns i platsbeskrivningen, "
+    "eller fråga när platsen blev UNESCO-världsarv."
 )
 FALLBACK_WE_RETURN_SV = (
-    "Vi återkommer med mer information så snart vi kan."
+    "Den frågan kan vi inte besvara utifrån världsarvskällorna. "
+    "Ställ gärna en ny fråga om själva platsen."
 )
 FALLBACK_NO_INFO_EN = (
-    "I don't have enough information in the local sources to answer that question."
+    "I could not find a clear answer to your question in the local sources. "
+    "Try rephrasing using words from the site description, "
+    "or ask when the site was inscribed as UNESCO World Heritage."
 )
 FALLBACK_WE_RETURN_EN = (
-    "We will get back to you with more information as soon as we can."
+    "That question cannot be answered from the world heritage sources. "
+    "Please ask a new question about this site."
 )
 
-# Minsta relevans för att svara direkt (annars "vi återkommer")
+_DECLINE_PERSONAL = "DECLINE_PERSONAL"
+_DECLINE_OFF_TOPIC = "DECLINE_OFF_TOPIC"
+_DECLINE_NO_INFO = "DECLINE_NO_INFO"
+
 _MIN_QUESTION_WORD_LEN = 3
-_MIN_MATCH_SCORE = 1
-_YEAR_PATTERN = re.compile(
-    r"\b(\d{3,4})s?\b|(\d{1,2}00)-talet|århundrad|century|since|sedan",
-    re.IGNORECASE,
-)
+_MIN_WORD_MATCHES_SINGLE = 1
+_MIN_WORD_MATCHES_MULTI = 2
+_OPENAI_CONTEXT_MAX = 12000
+
 _QUESTION_STOP_WORDS = frozenset(
     {
         "what",
@@ -43,65 +64,97 @@ _QUESTION_STOP_WORDS = frozenset(
         "detta",
         "denna",
         "dette",
+        "den",
+        "det",
+        "är",
         "vara",
         "finns",
         "gör",
-        "where",
         "which",
         "vilken",
         "vilket",
         "vilka",
-        "what",
+        "hur",
+        "how",
+        "why",
+        "varför",
+        "säger",
+        "säga",
+        "källorna",
+        "källan",
+        "sources",
+        "källor",
+        "kan",
+        "inte",
+        "the",
+        "and",
     }
 )
-_GENERIC_QUESTION_HINTS = (
-    "unikt",
-    "unique",
-    "historia",
-    "history",
-    "berätta",
-    "beskriv",
-    "describe",
-    "tell me",
-    "what is",
-    "what makes",
-    "vad är",
+_LISTING_YEAR_HINTS = (
     "världsarv",
+    "unesco",
+    "listades",
+    "inscribed",
     "world heritage",
-    "om detta",
-    "about this",
-    "vad kan",
-    "what can",
+    "världsarvslistan",
+    "world heritage site",
 )
-_TEMPORAL_QUESTION_HINTS = (
+_CREATION_HINTS = (
+    "skapades",
+    "grundades",
+    "founded",
+    "created",
+    "tillkom",
+    "anlades",
+    "byggdes",
+    "established",
+    "built",
+    "grunden",
+)
+_TEMPORAL_HINTS = (
     "när",
     "when",
     "år",
     "year",
-    "date",
     "datum",
-    "skapades",
-    "skapad",
-    "grundades",
-    "grundad",
-    "tillkom",
-    "created",
-    "founded",
-    "established",
-    "listades",
-    "inscribed",
+    "date",
     "sedan",
     "since",
 )
-_LOCATION_QUESTION_HINTS = (
-    "var ",
-    "where",
-    "land",
-    "country",
-    "plats",
-    "location",
-    "ligger",
-    "located",
+_SITE_LOCATION_PHRASES = (
+    "var ligger",
+    "where is it",
+    "where is this",
+    "where is the",
+    "vilket land",
+    "which country",
+    "platsen ligger",
+    "ligger platsen",
+    "ligger det",
+    "ligger den",
+    "finns platsen",
+    "världsarv",
+    "world heritage",
+    "unesco",
+)
+_PERSONAL_QUESTION_HINTS = (
+    "var bor jag",
+    "var bor du",
+    "var bor man",
+    "where do i live",
+    "where do you live",
+    "bor jag",
+    "bor du",
+    "mitt hem",
+    "my home",
+    "my address",
+    "min adress",
+    "var är jag",
+    "where am i",
+    "vem är jag",
+    "who am i",
+    "vad heter jag",
+    "what is my name",
 )
 _OFF_TOPIC_HINTS = (
     "månen",
@@ -113,6 +166,12 @@ _OFF_TOPIC_HINTS = (
     "price",
     "öppettider",
     "opening hours",
+    "betyder",
+    "what does",
+)
+_SITE_REFERENCE_WORDS = re.compile(
+    r"\b(platsen|detta|det|den|site|heritage|världsarv|unesco|stället|objektet|här|falun|gruv)\b",
+    re.IGNORECASE,
 )
 _CATEGORY_SV = {
     "Cultural": "Kultur",
@@ -129,6 +188,7 @@ _COUNTRY_SV = {
     "Italy": "Italien",
     "Spain": "Spanien",
     "United Kingdom": "Storbritannien",
+    "Iceland": "Island",
 }
 _EN_WORDS = re.compile(
     r"\b(the|and|with|from|was|were|inscribed|heritage|site|area|mountain|located|cultural|since|world|great|mining)\b",
@@ -140,8 +200,43 @@ _SV_WORDS = re.compile(
 )
 
 
+class QuestionIntent(str, Enum):
+    PERSONAL = "personal"
+    OFF_TOPIC = "off_topic"
+    SITE_LISTING_YEAR = "site_listing_year"
+    SITE_LOCATION = "site_location"
+    SITE_CATEGORY = "site_category"
+    HERITAGE_CONTENT = "heritage_content"
+
+
 def _normalize_language(language: str) -> str:
     return (language or "sv").lower()[:2]
+
+
+def _site_display_name(site: dict, language: str) -> str:
+    lang = _normalize_language(language)
+    if lang == "sv":
+        return (site.get("name_sv") or site.get("name") or "").strip()
+    return (site.get("name") or site.get("name_sv") or "").strip()
+
+
+def classify_question_intent(question: str) -> QuestionIntent:
+    """Tolkar hela frågan i prioriterad ordning – inte enstaka nyckelord."""
+    q = (question or "").strip().lower()
+    if not q:
+        return QuestionIntent.HERITAGE_CONTENT
+
+    if _is_personal_question(q):
+        return QuestionIntent.PERSONAL
+    if _is_off_topic_question(q):
+        return QuestionIntent.OFF_TOPIC
+    if _asks_listing_year(q):
+        return QuestionIntent.SITE_LISTING_YEAR
+    if _asks_country(q):
+        return QuestionIntent.SITE_LOCATION
+    if _asks_category(q):
+        return QuestionIntent.SITE_CATEGORY
+    return QuestionIntent.HERITAGE_CONTENT
 
 
 def _language_score(sentence: str, language: str) -> int:
@@ -168,7 +263,9 @@ def _pick_site_description(site: dict, language: str) -> tuple[str, str]:
     localized = (site.get(localized_key) or "").strip()
     desc_en = (site.get("desc_en") or site.get("description") or "").strip()
 
-    if localized and desc_en and len(localized) < len(desc_en) * 0.6:
+    if localized and len(localized) >= 80:
+        return localized, localized_key
+    if localized and desc_en and len(localized) < len(desc_en) * 0.35:
         return desc_en, "desc_en"
     if localized:
         return localized, localized_key
@@ -191,31 +288,37 @@ def search_documents(db: Optional[Session], site_id: int, question: str) -> List
 
 
 def _question_words(question: str) -> list[str]:
+    tokens = re.findall(r"\b[\wåäöÅÄÖéèêëü]+\b", (question or "").lower())
     return [
-        w.lower()
-        for w in question.split()
-        if len(w) > _MIN_QUESTION_WORD_LEN and w.lower() not in _QUESTION_STOP_WORDS
+        w
+        for w in tokens
+        if len(w) >= _MIN_QUESTION_WORD_LEN and w not in _QUESTION_STOP_WORDS
     ]
 
 
-def _is_generic_site_question(question: str) -> bool:
-    q = (question or "").lower()
-    return any(hint in q for hint in _GENERIC_QUESTION_HINTS)
-
-
-def _is_temporal_question(question: str) -> bool:
-    q = (question or "").lower()
-    return any(hint in q for hint in _TEMPORAL_QUESTION_HINTS)
-
-
-def _is_location_question(question: str) -> bool:
-    q = (question or "").lower()
-    return any(hint in q for hint in _LOCATION_QUESTION_HINTS)
+def _min_required_word_matches(word_count: int) -> int:
+    if word_count <= 1:
+        return _MIN_WORD_MATCHES_SINGLE
+    return _MIN_WORD_MATCHES_MULTI
 
 
 def _is_off_topic_question(question: str) -> bool:
     q = (question or "").lower()
     return any(hint in q for hint in _OFF_TOPIC_HINTS)
+
+
+def _is_personal_question(question: str) -> bool:
+    q = (question or "").lower()
+    if any(hint in q for hint in _PERSONAL_QUESTION_HINTS):
+        return True
+    if re.search(r"\bvar\s+(bor|är)\s+(jag|du|man|mig|dig)\b", q):
+        return True
+    if re.search(r"\b(where\s+do\s+i\s+live|where\s+am\s+i)\b", q):
+        return True
+    if re.search(r"\bvar\b", q) and re.search(r"\b(jag|du|man|mig|dig|mitt|min|hem)\b", q):
+        if not _SITE_REFERENCE_WORDS.search(q):
+            return True
+    return False
 
 
 def _split_sentences(context: str) -> list[str]:
@@ -236,52 +339,24 @@ def _join_sentences(sentences: list[str], max_sentences: int = 3, language: str 
     return answer
 
 
-def _summary_from_context(context: str, max_sentences: int = 3, language: str = "sv") -> str:
-    sentences = _filter_sentences_for_language(_split_sentences(context), language)
-    if not sentences:
-        trimmed = context.strip()
-        return trimmed[:600] + ("…" if len(trimmed) > 600 else "")
-    return _join_sentences(sentences, max_sentences, language)
-
-
-def _year_sentences(context: str, language: str = "sv") -> list[str]:
-    hits = [sentence for sentence in _split_sentences(context) if _YEAR_PATTERN.search(sentence)]
-    descriptive = [
-        sentence
-        for sentence in hits
-        if "unesco världsarv sedan" not in sentence.lower()
-        and "inscribed as unesco" not in sentence.lower()
-        and not sentence.lower().startswith("land:")
-        and not sentence.lower().startswith("kategori:")
-        and not sentence.lower().startswith("country:")
-        and not sentence.lower().startswith("category:")
-    ]
-    descriptive = _filter_sentences_for_language(descriptive or hits, language)
-    descriptive.sort(
-        key=lambda sentence: (
-            "talet" in sentence.lower() or "century" in sentence.lower(),
-            "sedan" in sentence.lower() or "since" in sentence.lower(),
-            _language_score(sentence, language),
-            len(sentence),
-        ),
-        reverse=True,
-    )
-    return descriptive
-
-
 def _heritage_listing_answer(site: dict, language: str) -> str:
     year = (site.get("year_inscribed") or "").strip()
     if not year:
         return ""
-    lang = (language or "sv").lower()[:2]
+    name = _site_display_name(site, language)
+    lang = _normalize_language(language)
     if lang == "en":
+        if name:
+            return f"{name} was inscribed as a UNESCO World Heritage Site in {year}."
         return f"It was inscribed as a UNESCO World Heritage Site in {year}."
+    if name:
+        return f"{name} blev UNESCO-världsarv {year}."
     return f"Platsen blev UNESCO-världsarv {year}."
 
 
 def _location_answer(site: dict, language: str) -> str:
     country = (site.get("country") or "").strip()
-    name = (site.get("name") or "").strip()
+    name = _site_display_name(site, language)
     if not country and not name:
         return ""
     lang = _normalize_language(language)
@@ -290,53 +365,81 @@ def _location_answer(site: dict, language: str) -> str:
             return f"{name} is located in {country}."
         return f"The site is located in {country}." if country else name
     country_display = _COUNTRY_SV.get(country, country)
-    return f"Platsen ligger i {country_display}." if country_display else "Platsen ligger i Sverige."
+    if name and country_display:
+        return f"{name} ligger i {country_display}."
+    return f"Platsen ligger i {country_display}." if country_display else ""
 
 
-def _temporal_answer(site: Optional[dict], context: str, question: str, language: str) -> str:
-    q = (question or "").lower()
-    listing_words = ("världsarv", "unesco", "listed", "inscribed", "listades", "world heritage")
-    if site and any(word in q for word in listing_words):
-        listing = _heritage_listing_answer(site, language)
-        if listing:
-            return listing
-
-    year_hits = _year_sentences(context, language)
-    if year_hits:
-        return _join_sentences(year_hits[:2], language=language)
-
-    if site and site.get("year_inscribed"):
-        listing = _heritage_listing_answer(site, language)
-        if listing:
-            lang = _normalize_language(language)
-            if lang == "en":
-                return (
-                    f"{listing} Our local sources also describe historical activity at the site "
-                    "over a longer period."
-                )
-            return (
-                f"{listing} I våra lokala källor beskrivs också att platsen har en lång historia."
-            )
-
-    return _summary_from_context(context, language=language)
+def _category_answer(site: dict, language: str) -> str:
+    category = (site.get("category") or "").strip()
+    if not category:
+        return ""
+    name = _site_display_name(site, language)
+    lang = _normalize_language(language)
+    if lang == "en":
+        if name:
+            return f"{name} is listed as a {category} World Heritage property."
+        return f"The site is listed as a {category} World Heritage property."
+    display = _CATEGORY_SV.get(category, category)
+    if name:
+        return f"{name} är klassad som {display} världsarv."
+    return f"Platsen är klassad som {display} världsarv."
 
 
-def _answer_by_intent(
-    question: str,
-    site: Optional[dict],
-    context: str,
-    language: str,
+def _asks_listing_year(question: str) -> bool:
+    q = question.lower()
+    has_temporal = any(h in q for h in _TEMPORAL_HINTS)
+    has_listing = any(h in q for h in _LISTING_YEAR_HINTS)
+    has_creation = any(h in q for h in _CREATION_HINTS)
+    if has_creation and not has_listing:
+        return False
+    return has_temporal and has_listing
+
+
+def _asks_country(question: str) -> bool:
+    if _is_personal_question(question):
+        return False
+    q = question.lower()
+    if any(h in q for h in _LISTING_YEAR_HINTS + _CREATION_HINTS):
+        return False
+    if any(phrase in q for phrase in _SITE_LOCATION_PHRASES):
+        return True
+    return bool(
+        re.search(r"\bvar\s+ligger\s+(det|den|platsen|detta|site)\b", q)
+        or re.search(r"\bwhere\s+(is|are)\s+(it|this|the)\b", q)
+    )
+
+
+def _asks_category(question: str) -> bool:
+    q = question.lower()
+    return any(
+        hint in q
+        for hint in (
+            "kategori",
+            "category",
+            "kulturarv",
+            "cultural",
+            "natural",
+            "naturarv",
+            "blandat",
+            "mixed",
+            "typ av världsarv",
+            "type of heritage",
+        )
+    )
+
+
+def _structured_metadata_answer(
+    intent: QuestionIntent, site: dict, language: str
 ) -> Optional[str]:
-    if _is_off_topic_question(question):
+    if not site:
         return None
-    if _is_temporal_question(question):
-        return _temporal_answer(site, context, question, language)
-    if _is_location_question(question) and site:
-        location = _location_answer(site, language)
-        if location:
-            return location
-    if _is_generic_site_question(question):
-        return _summary_from_context(context, language=language)
+    if intent == QuestionIntent.SITE_LISTING_YEAR and site.get("year_inscribed"):
+        return _heritage_listing_answer(site, language)
+    if intent == QuestionIntent.SITE_LOCATION and site.get("country"):
+        return _location_answer(site, language)
+    if intent == QuestionIntent.SITE_CATEGORY and site.get("category"):
+        return _category_answer(site, language)
     return None
 
 
@@ -345,35 +448,10 @@ def _heritage_site_context(site_id: int | str, language: str) -> tuple[str, list
     if not site:
         return "", []
 
-    lang = _normalize_language(language)
     parts: list[str] = []
     sources: list[str] = []
 
-    year = (site.get("year_inscribed") or "").strip()
-    country = (site.get("country") or "").strip()
-    category = (site.get("category") or "").strip()
-
-    if lang == "en":
-        name = (site.get("name") or "").strip()
-        if name:
-            parts.append(name)
-        if year:
-            parts.append(f"Inscribed as UNESCO World Heritage in {year}.")
-        if country:
-            parts.append(f"Country: {country}.")
-        if category:
-            parts.append(f"Category: {category}.")
-    else:
-        if year:
-            parts.append(f"UNESCO världsarv sedan {year}.")
-        if country:
-            country_display = _COUNTRY_SV.get(country, country)
-            parts.append(f"Land: {country_display}.")
-        if category:
-            category_display = _CATEGORY_SV.get(category, category)
-            parts.append(f"Kategori: {category_display}.")
-
-    description, source_key = _pick_site_description(site, lang)
+    description, source_key = _pick_site_description(site, language)
     if description:
         parts.append(description)
         sources.append(f"heritage-sites.json ({source_key})")
@@ -381,17 +459,157 @@ def _heritage_site_context(site_id: int | str, language: str) -> tuple[str, list
     return "\n\n".join(parts), sources
 
 
+def _word_matches_text(word: str, text: str) -> bool:
+    if word in text:
+        return True
+    if len(word) >= 4 and word[:4] in text:
+        return True
+    return False
+
+
 def _score_sentence(sentence: str, words: list[str]) -> int:
     lower = sentence.lower()
-    return sum(1 for w in words if w in lower)
+    return sum(1 for w in words if _word_matches_text(w, lower))
+
+
+def _sentence_relevance(sentence: str, question: str, words: list[str]) -> float:
+    """Hela frågan vägs in (likhet + nyckelord), inte bara enstaka ord."""
+    word_score = float(_score_sentence(sentence, words))
+    q_norm = re.sub(r"\s+", " ", (question or "").lower().strip())
+    similarity = SequenceMatcher(None, q_norm, sentence.lower()).ratio()
+    return word_score * 2.0 + similarity
+
+
+def _cite_from_context(question: str, context: str, language: str) -> str:
+    words = _question_words(question)
+    if not words:
+        return ""
+    min_score = _min_required_word_matches(len(words))
+    sentences = _filter_sentences_for_language(_split_sentences(context), language)
+    ranked = sorted(
+        sentences,
+        key=lambda s: _sentence_relevance(s, question, words),
+        reverse=True,
+    )
+    hits = [s for s in ranked if _score_sentence(s, words) >= min_score]
+    if not hits:
+        return ""
+    return _join_sentences(hits[:3], language=language)
 
 
 def _pick_language_fallback(lang: str, kind: str) -> str:
-    """kind: no_info | we_return"""
     lang = (lang or "sv").lower()[:2]
     if kind == "we_return":
         return FALLBACK_WE_RETURN_EN if lang == "en" else FALLBACK_WE_RETURN_SV
     return FALLBACK_NO_INFO_EN if lang == "en" else FALLBACK_NO_INFO_SV
+
+
+def _openai_enabled() -> bool:
+    return (
+        (settings.AI_PROVIDER or "").lower() == "openai"
+        and bool((settings.OPENAI_API_KEY or "").strip())
+    )
+
+
+def _site_facts_block(site: dict) -> str:
+    lines: list[str] = []
+    if site.get("name") or site.get("name_sv"):
+        lines.append(f"Namn: {site.get('name_sv') or site.get('name')}")
+    if site.get("country"):
+        lines.append(f"Land: {site.get('country')}")
+    if site.get("year_inscribed"):
+        lines.append(f"UNESCO-listning (år): {site.get('year_inscribed')}")
+    if site.get("category"):
+        lines.append(f"Kategori: {site.get('category')}")
+    return "\n".join(lines)
+
+
+def _openai_system_prompt(language: str) -> str:
+    lang = _normalize_language(language)
+    if lang == "en":
+        return (
+            "You guide visitors at a UNESCO World Heritage site. Read the ENTIRE user question.\n"
+            "Answer ONLY using CONTEXT and FACTS below. Do not use outside knowledge.\n"
+            f"- Personal questions (where do I live, my address, who am I): reply exactly {_DECLINE_PERSONAL}\n"
+            f"- Off-topic (parking, moon, prices): reply exactly {_DECLINE_OFF_TOPIC}\n"
+            f"- Not in sources, or 'when was it created' without UNESCO listing in sources: {_DECLINE_NO_INFO}\n"
+            "- Never invent years. Max 3 sentences in the same language as the question."
+        )
+    return (
+        "Du är guide vid ett UNESCO-världsarv. Läs HELA användarens fråga.\n"
+        "Svara ENDAST med fakta från KONTEXT och FAKTA nedan. Använd inte extern kunskap.\n"
+        f"- Personliga frågor (var bor jag, min adress, vem är jag): svara exakt {_DECLINE_PERSONAL}\n"
+        f"- Utanför ämnet (parkering, månen, priser): svara exakt {_DECLINE_OFF_TOPIC}\n"
+        f"- Saknas i källor, eller 'när skapades' utan UNESCO-listning i källor: {_DECLINE_NO_INFO}\n"
+        "- Hitta inte på årtal. Max 3 meningar på samma språk som frågan."
+    )
+
+
+def _map_openai_decline(text: str, language: str) -> Optional[Tuple[str, bool]]:
+    stripped = (text or "").strip()
+    upper = stripped.upper()
+    if upper.startswith(_DECLINE_PERSONAL) or upper.startswith(_DECLINE_OFF_TOPIC):
+        return _pick_language_fallback(language, "we_return"), True
+    if upper.startswith(_DECLINE_NO_INFO):
+        return _pick_language_fallback(language, "no_info"), False
+    return None
+
+
+def _try_openai_answer(
+    question: str,
+    context: str,
+    site: dict,
+    language: str,
+) -> Optional[Tuple[str, bool]]:
+    api_key = (settings.OPENAI_API_KEY or "").strip()
+    if not api_key:
+        return None
+
+    site_name = _site_display_name(site, language) or site.get("name") or "UNESCO site"
+    facts = _site_facts_block(site)
+    ctx = context[:_OPENAI_CONTEXT_MAX]
+    user_body = (
+        f"PLATS: {site_name}\n"
+        f"FAKTA:\n{facts or '(inga)'}\n\n"
+        f"KONTEXT:\n{ctx}\n\n"
+        f"FRÅGA: {question.strip()}"
+    )
+
+    try:
+        with httpx.Client(timeout=45.0) as client:
+            response = client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": (settings.OPENAI_MODEL or "gpt-4o-mini").strip(),
+                    "temperature": 0,
+                    "max_tokens": 500,
+                    "messages": [
+                        {"role": "system", "content": _openai_system_prompt(language)},
+                        {"role": "user", "content": user_body},
+                    ],
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        logger.warning("OpenAI AI answer failed: %s", exc)
+        return None
+
+    try:
+        text = payload["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError):
+        return None
+
+    declined = _map_openai_decline(text, language)
+    if declined:
+        return declined
+    if text:
+        return text, False
+    return None
 
 
 def ask_ai(
@@ -402,8 +620,11 @@ def ask_ai(
 ) -> Tuple[str, List[str], bool]:
     """
     Returns: (answer, sources, needs_followup)
-    needs_followup=True betyder att svaret är "vi återkommer".
+    Tolkar hela frågan först, svarar sedan strikt från källor.
     """
+    question = (question or "").strip()
+    intent = classify_question_intent(question)
+
     local_files = load_local_documents(site_id)
     sources = [name for name, _ in local_files]
     context_parts = [text for _, text in local_files]
@@ -421,34 +642,25 @@ def ask_ai(
     if not context_parts:
         return _pick_language_fallback(language, "no_info"), [], False
 
-    site = find_site_by_ref(str(site_id))
+    site = find_site_by_ref(str(site_id)) or {}
     context = "\n\n".join(context_parts)
-    words = _question_words(question)
-    sentences = _filter_sentences_for_language(_split_sentences(context), language)
 
-    if not words:
-        intent_answer = _answer_by_intent(question, site, context, language)
-        if intent_answer:
-            return intent_answer, sources, False
+    if intent == QuestionIntent.PERSONAL:
+        return _pick_language_fallback(language, "we_return"), sources, True
+    if intent == QuestionIntent.OFF_TOPIC:
         return _pick_language_fallback(language, "we_return"), sources, True
 
-    scored = [(s, _score_sentence(s, words)) for s in sentences]
-    hits = [s for s, score in scored if score >= _MIN_MATCH_SCORE]
-    hits = _filter_sentences_for_language(hits, language)
-    hits.sort(key=lambda s: _score_sentence(s, words), reverse=True)
+    metadata_answer = _structured_metadata_answer(intent, site, language)
+    if metadata_answer:
+        return metadata_answer, sources, False
 
-    if hits:
-        answer = _join_sentences(hits[:3], language=language)
-        return answer, sources, False
+    if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
+        openai_result = _try_openai_answer(question, context, site, language)
+        if openai_result:
+            return openai_result[0], sources, openai_result[1]
 
-    intent_answer = _answer_by_intent(question, site, context, language)
-    if intent_answer:
-        return intent_answer, sources, False
-
-    if _is_off_topic_question(question):
-        return _pick_language_fallback(language, "we_return"), sources, True
-
-    if context.strip():
-        return _summary_from_context(context, language=language), sources, False
+    cited = _cite_from_context(question, context, language)
+    if cited:
+        return cited, sources, False
 
     return _pick_language_fallback(language, "no_info"), sources, False

@@ -1,42 +1,43 @@
-"""AI svarar från lokala filer utan databas."""
+"""AI svarar från lokala filer utan databas – strikt utan gissningar."""
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.ai_service import QuestionIntent, classify_question_intent
 
 client = TestClient(app)
 
 
-def test_ai_ask_local_pdf():
+def test_ai_ask_local_pdf_listing_year():
     response = client.post(
         "/api/ai/ask",
         json={
-            "site_id": 1,
-            "question": "När blev Engelsbergs bruk världsarv?",
+            "site_id": 556,
+            "question": "När blev platsen UNESCO-världsarv?",
+            "language": "sv",
         },
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data["answer"]) > 10
-    assert data["sources"]
+    assert "1993" in data["answer"]
     assert data["needs_followup"] is False
 
 
-def test_ai_ask_we_return():
+def test_ai_ask_we_return_off_topic():
     response = client.post(
         "/api/ai/ask",
         json={
-            "site_id": 1,
+            "site_id": 1027,
             "question": "Vad kostar parkeringen på månen?",
             "language": "sv",
         },
     )
     assert response.status_code == 200
     data = response.json()
-    assert "återkommer" in data["answer"].lower()
     assert data["needs_followup"] is True
 
 
-def test_ai_ask_falun_generic_question():
+def test_ai_ask_falun_generic_question_no_guess():
+    """Vag fråga utan träff i källtext → ingen påhittad sammanfattning."""
     response = client.post(
         "/api/ai/ask",
         json={
@@ -47,12 +48,12 @@ def test_ai_ask_falun_generic_question():
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["needs_followup"] is False
-    assert "Stora stöten" in data["answer"] or "Falun" in data["answer"]
-    assert "engelsbergs_bruk.txt" not in data["sources"]
+    assert "lokala källorna" in data["answer"].lower()
+    assert "Stora stöten" not in data["answer"]
 
 
-def test_ai_ask_falun_when_created():
+def test_ai_ask_falun_creation_not_guessed_from_random_years():
+    """'När skapades' ska inte plocka 1300/1700-tal ur beskrivningen."""
     response = client.post(
         "/api/ai/ask",
         json={
@@ -63,13 +64,27 @@ def test_ai_ask_falun_when_created():
     )
     assert response.status_code == 200
     data = response.json()
+    assert "lokala källorna" in data["answer"].lower()
+    assert "1300" not in data["answer"]
+    assert "2001" not in data["answer"]
+
+
+def test_ai_ask_falun_listing_year_explicit():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "När listades platsen som UNESCO världsarv?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "2001" in data["answer"]
     assert data["needs_followup"] is False
-    assert "1300" in data["answer"] or "2001" in data["answer"] or "världsarv" in data["answer"].lower()
-    assert "Inscribed as UNESCO" not in data["answer"]
-    assert "Great Copper Mountain" not in data["answer"]
 
 
-def test_ai_ask_falun_swedish_only():
+def test_ai_ask_falun_country_metadata():
     response = client.post(
         "/api/ai/ask",
         json={
@@ -82,3 +97,45 @@ def test_ai_ask_falun_swedish_only():
     data = response.json()
     assert "Sverige" in data["answer"]
     assert " is located in " not in data["answer"]
+
+
+def test_ai_ask_var_bor_jag_not_site_country():
+    """Personlig fråga ska inte ge 'Platsen ligger i Sverige'."""
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "Var bor jag?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is True
+    assert "Platsen ligger i" not in data["answer"]
+    assert "världsarvskällorna" in data["answer"].lower()
+
+
+def test_classify_intent_reads_full_question():
+    assert classify_question_intent("Var bor jag?") == QuestionIntent.PERSONAL
+    assert classify_question_intent("Var ligger det?") == QuestionIntent.SITE_LOCATION
+    assert (
+        classify_question_intent("När listades platsen som UNESCO världsarv?")
+        == QuestionIntent.SITE_LISTING_YEAR
+    )
+
+
+def test_ai_ask_keyword_citation_from_description():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1027,
+            "question": "Vad säger källorna om koppar och gruvdrift?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    lower = data["answer"].lower()
+    assert "copper" in lower or "koppar" in lower or "mining" in lower or "gruv" in lower
