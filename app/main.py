@@ -154,7 +154,13 @@ def serve_webapp():
 @app.get("/sites/{site_ref}", include_in_schema=False)
 def serve_site_landing(site_ref: str):
     """Landningssida från SMS-länk – platsinfo, AI och länk till profil."""
-    return FileResponse(_PROJECT_ROOT / "site-landing.html")
+    return FileResponse(
+        _PROJECT_ROOT / "site-landing.html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/config.json", include_in_schema=False)

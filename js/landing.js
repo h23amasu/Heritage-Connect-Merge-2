@@ -8,7 +8,44 @@
   const params = new URLSearchParams(window.location.search);
   const lang = (params.get("lang") || document.documentElement.lang || "sv").slice(0, 2);
 
-  const API_BASE = window.location.origin;
+  const API_BASE_STORAGE_KEY = "heritage_connect_api_base_url";
+  const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+
+  function normalizeApiBaseUrl(raw) {
+    if (!raw || !String(raw).trim()) {
+      return DEFAULT_API_BASE_URL;
+    }
+    let url = String(raw).trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(url)) {
+      url = `http://${url}`;
+    }
+    return url;
+  }
+
+  function resolveApiBase() {
+    try {
+      const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
+      if (stored) {
+        return normalizeApiBaseUrl(stored);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    const { origin, hostname, port } = window.location;
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+      return origin;
+    }
+    if (port === "8000" || port === "8080") {
+      return origin;
+    }
+    return DEFAULT_API_BASE_URL;
+  }
+
+  const API_BASE = resolveApiBase();
+
+  if (siteRef) {
+    window.__landingSite = { unesco_id: siteRef, id: siteRef };
+  }
 
   const SECTION_SPLIT =
     /(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements))/gi;
@@ -245,6 +282,16 @@
     if (content) content.style.display = "block";
   }
 
+  function setAiAnswer(text, { loading = false } = {}) {
+    const answerBox = document.getElementById("landingAiAnswer");
+    if (!answerBox) return;
+    answerBox.textContent = text;
+    answerBox.classList.toggle("is-active", Boolean(text) || loading);
+    if (text && !loading) {
+      answerBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
+
   async function renderSite(site) {
     document.title = `${site.name} - Heritage Connect`;
     const img = document.getElementById("landingImage");
@@ -282,18 +329,23 @@
 
     const descContainer = document.getElementById("landingDescription");
     if (hasLongUnescoText(site)) {
-      try {
-        await renderLongDescription(site, lang);
-      } catch (_) {
-        if (descContainer) {
+      if (descContainer) {
+        descContainer.classList.add("landing-desc-loading");
+        descContainer.textContent = "Laddar UNESCO-text…";
+      }
+      renderLongDescription(site, lang)
+        .catch(() => {
+          if (!descContainer) return;
           clearDescriptionContainer(descContainer);
           appendParagraphs(
             descContainer,
             "landing-desc-para",
             "Kunde inte visa hela UNESCO-texten just nu. Du kan fortfarande ställa frågor till AI nedan."
           );
-        }
-      }
+        })
+        .finally(() => {
+          descContainer?.classList.remove("landing-desc-loading");
+        });
     } else if (descContainer) {
       clearDescriptionContainer(descContainer);
       const localized = getUnescoDescription(site, lang) || site.description || "";
@@ -368,7 +420,7 @@
 
   async function askAi() {
     const input = document.getElementById("landingAiInput");
-    const answerBox = document.getElementById("landingAiAnswer");
+    const askBtn = document.getElementById("landingAiBtn");
     const site = window.__landingSite;
     const question = input ? input.value.trim() : "";
 
@@ -376,18 +428,18 @@
       toast("Skriv en fråga först.");
       return;
     }
-    if (!site) {
+
+    const siteId = parseSiteId(site);
+    if (!siteId) {
       toast("Platsen laddas fortfarande – vänta ett ögonblick.");
       return;
     }
 
-    const siteId = parseSiteId(site);
-    if (!siteId) {
-      toast("Ogiltigt plats-id.");
-      return;
-    }
+    setAiAnswer("AI söker svar…", { loading: true });
+    if (askBtn) askBtn.disabled = true;
 
-    if (answerBox) answerBox.textContent = "AI söker svar...";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
       const response = await fetch(`${API_BASE}/api/ai/ask`, {
@@ -398,6 +450,7 @@
           question,
           language: lang,
         }),
+        signal: controller.signal,
       });
       let data = {};
       try {
@@ -408,13 +461,22 @@
       if (!response.ok) {
         throw new Error(formatApiError(data, `AI-fel (${response.status})`));
       }
-      if (answerBox) {
-        answerBox.textContent = data.answer || "Inget svar tillgängligt.";
-      }
+      setAiAnswer(data.answer || "Inget svar tillgängligt.");
     } catch (error) {
-      if (answerBox) {
-        answerBox.textContent = `Kunde inte nå AI: ${error?.message || "okänt fel"}`;
+      const isAbort = error?.name === "AbortError";
+      const isNetwork =
+        error?.message === "Failed to fetch" || error?.name === "TypeError";
+      let message = error?.message || "okänt fel";
+      if (isAbort) {
+        message = "Tidsgräns (60 s). Försök igen.";
+      } else if (isNetwork) {
+        message =
+          `Kunde inte nå ${API_BASE}. Öppna sidan via Railway eller starta backend på port 8000 (inte Live Server).`;
       }
+      setAiAnswer(`Kunde inte nå AI: ${message}`);
+    } finally {
+      clearTimeout(timeoutId);
+      if (askBtn) askBtn.disabled = false;
     }
   }
 

@@ -19,6 +19,10 @@
     .landing-meta { color: var(--muted); font-size: 14px; margin: 8px 0 16px; }
     #landingTitle { margin: 0 0 8px; font-size: 1.5rem; line-height: 1.25; }
     #landingDescription { line-height: 1.55; margin: 0 0 24px; }
+    .ai-answer.is-active {
+      display: block !important;
+      min-height: 2.5rem;
+    }
     .landing-desc-para {
       margin: 0 0 1rem;
       line-height: 1.65;
@@ -64,7 +68,7 @@
         </div>
         <h2 id="landingTitle"></h2>
         <p class="landing-meta" id="landingMeta"></p>
-        <p id="landingDescription"></p>
+        <div id="landingDescription" aria-live="polite"></div>
 
         <div class="landing-panel">
           <h3>Fråga AI om detta världsarv</h3>
@@ -73,7 +77,7 @@
             <input id="landingAiInput" type="text" placeholder="Vad är unikt med detta världsarv?" />
             <button class="primary-btn" type="button" id="landingAiBtn">Fråga</button>
           </div>
-          <div class="ai-answer" id="landingAiAnswer"></div>
+          <div class="ai-answer" id="landingAiAnswer" role="status" aria-live="polite"></div>
         </div>
 
         <div class="landing-actions">
@@ -88,6 +92,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/js/landing.js?v=9"></script>
+  <script src="/js/landing.js?v=10"></script>
 </body>
 </html>

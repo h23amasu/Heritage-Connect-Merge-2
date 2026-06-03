@@ -1153,6 +1153,11 @@
       display: none;
     }
 
+    .ai-answer.is-active {
+      display: block !important;
+      min-height: 2.5rem;
+    }
+
     .settings-row--preferences {
       padding-top: 12px;
       padding-bottom: 12px;
