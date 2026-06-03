@@ -171,6 +171,83 @@ def test_ai_ask_grimeton_what_is():
     assert "lokala källorna" not in data["answer"].lower()
 
 
+def test_ai_ask_finnish_listing_year():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1134,
+            "question": "Milloin paikka listattiin UNESCO-maailmanperinnöksi?",
+            "language": "fi",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "2004" in data["answer"]
+    assert data["needs_followup"] is False
+
+
+def test_ai_ask_french_grimeton_question():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1134,
+            "question": "Qu'est-ce que Grimeton?",
+            "language": "fr",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    assert "grimeton" in data["answer"].lower()
+    assert "lokala källorna" not in data["answer"].lower()
+    assert "local sources" not in data["answer"].lower()
+
+
+def test_classify_intent_multilingual():
+    assert (
+        classify_question_intent("Milloin paikka tuli UNESCO-maailmanperinnöksi?")
+        == QuestionIntent.SITE_LISTING_YEAR
+    )
+    assert classify_question_intent("Wo liegt es?") == QuestionIntent.SITE_LOCATION
+
+
+def test_ai_ask_unesco_official_languages_listing_year():
+    """UNESCO:s språk: en, fr, es, ar, ru, zh (+ sv) – metadata år."""
+    cases = [
+        ("fr", "Quand le site a-t-il été inscrit au patrimoine mondial UNESCO?"),
+        ("es", "¿Cuándo se inscribió el sitio como patrimonio mundial de la UNESCO?"),
+        ("ru", "Когда объект был включён в список всемирного наследия ЮНЕСКО?"),
+        ("zh", "该遗产何时列入联合国教科文组织世界遗产名录？"),
+    ]
+    for lang, question in cases:
+        response = client.post(
+            "/api/ai/ask",
+            json={"site_id": 1134, "question": question, "language": lang},
+        )
+        assert response.status_code == 200, lang
+        assert "2004" in response.json()["answer"], lang
+
+
+def test_ai_ask_arabic_grimeton_desc():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 1134,
+            "question": "ما هو Grimeton؟",
+            "language": "ar",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    answer = data["answer"]
+    assert (
+        "grimeton" in answer.lower()
+        or "غرايمتون" in answer
+        or "فاربورغ" in answer
+    )
+
+
 def test_ai_ask_keyword_citation_from_description():
     response = client.post(
         "/api/ai/ask",
