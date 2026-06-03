@@ -549,14 +549,26 @@ async function translateRemoteText(text, targetLang, sourceLang = "en") {
  * Översätter annonsens UNESCO-text till läsarens språk.
  * Fakta: inbyggd desc_xx om tillräckligt lång, annars en→mål via /api/translate (samma origin först).
  */
+function serverLocalizedLang(site) {
+  return normalizeLanguageCode(site?.server_localized_lang || "");
+}
+
+/** API-text gäller bara för det språk som /closest hämtades med – inte vid byte till t.ex. fi/en. */
 function serverLocalizedDescription(site, targetLang) {
   const target = normalizeLanguageCode(targetLang);
   const fromApi = (site?.description || "").trim();
+  if (!fromApi || !site?.server_localized) return "";
+
+  const serverLang = serverLocalizedLang(site);
+  if (!serverLang || serverLang !== target) return "";
+
   const descEn = englishDescriptionForSite(site);
-  if (!fromApi) return "";
-  if (target === "en") return fromApi;
-  if (site?.server_localized && fromApi !== descEn) return fromApi;
-  if (descEn && fromApi !== descEn && fromApi.length >= 40) return fromApi;
+  if (target === "en") {
+    return descEn || fromApi;
+  }
+  if (fromApi !== descEn) {
+    return fromApi;
+  }
   return "";
 }
 
@@ -570,32 +582,38 @@ async function translateAdHeritageContent(site, targetLang, rawSite = null) {
   if (target === "en") {
     return {
       name: englishName,
-      description: serverDesc || descSource.text,
+      description: englishDescriptionForSite(site) || descSource.text,
       country: englishCountry,
       failed: false
     };
   }
 
+  const serverLang = serverLocalizedLang(site);
+  const serverMatchesTarget = site?.server_localized && serverLang === target;
+
   const localizedName = getUnescoSiteName(site, target);
-  let name =
-    (site?.server_localized && (site?.name || "").trim()) ||
-    localizedName ||
-    "";
-  if (!name && englishName) {
+  let name = localizedName || "";
+  if (serverMatchesTarget && (site?.name || "").trim()) {
+    name = (site.name || "").trim();
+  } else if (!name && englishName) {
     name = (await translateRemoteText(englishName, target, "en")) || englishName;
   }
 
-  let description = serverDesc || descSource.text;
-  if (!serverDesc && descSource.needsTranslate) {
+  let description = serverDesc;
+  if (!description) {
+    const english = englishDescriptionForSite(site);
+    const sourceText = descSource.needsTranslate ? descSource.text : english || descSource.text;
     description =
-      (await translateRemoteText(descSource.text, target, "en")) ||
-      descSource.text ||
-      "";
+      (await translateRemoteText(sourceText, target, "en")) || sourceText || descSource.text || "";
   }
 
   let country = englishCountry;
   if (englishCountry) {
-    country = (await translateRemoteText(englishCountry, target, "en")) || englishCountry;
+    if (serverMatchesTarget && (site?.country || "").trim()) {
+      country = (site.country || "").trim();
+    } else {
+      country = (await translateRemoteText(englishCountry, target, "en")) || englishCountry;
+    }
   }
 
   return {
@@ -1655,15 +1673,40 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
   await ensureHeritageTextsReady();
   if (uiSeq !== applySiteUiSeq) return;
 
-  const merged = mergeHeritageSiteTexts(site);
+  let workingSite = site;
   const target = normalizeLanguageCode(lang || getNewspaperLang());
+  const lat = geoState.latitude;
+  const lng = geoState.longitude;
+  const serverLang = serverLocalizedLang(workingSite);
+
+  if (
+    lat != null &&
+    lng != null &&
+    (!workingSite?.server_localized || serverLang !== target)
+  ) {
+    const apiSite = await fetchClosestSiteFromApi(lat, lng, target);
+    if (uiSeq !== applySiteUiSeq) return;
+    if (apiSite) {
+      workingSite = mergeHeritageSiteTexts({
+        ...workingSite,
+        ...apiSite,
+        unesco_id: apiSite.unesco_id || workingSite.unesco_id,
+        distance_m: apiSite.distance_m ?? workingSite.distance_m,
+        server_localized: true,
+        server_localized_lang: target
+      });
+      lastClosestSite = workingSite;
+    }
+  }
+
+  const merged = mergeHeritageSiteTexts(workingSite);
 
   if (target !== "en") {
     await setHeritageAdLoadingState(target);
   }
   if (uiSeq !== applySiteUiSeq) return;
 
-  const content = await translateAdHeritageContent(merged, target, site);
+  const content = await translateAdHeritageContent(merged, target, workingSite);
   if (uiSeq !== applySiteUiSeq) return;
 
   currentSite.name = content.name;
@@ -1671,7 +1714,7 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
 
   const meta = document.getElementById("siteDetailMeta");
   if (meta) {
-    const parts = [content.country, merged.year_inscribed || site.year_inscribed].filter(Boolean);
+    const parts = [content.country, merged.year_inscribed || workingSite.year_inscribed].filter(Boolean);
     meta.textContent = parts.join(", ");
   }
 
@@ -1758,7 +1801,7 @@ async function fetchClosestSiteFromApi(lat, lng, lang) {
       window.clearTimeout(timeoutId);
       const data = await response.json();
       if (data?.name || data?.description) {
-        return { ...data, server_localized: true };
+        return { ...data, server_localized: true, server_localized_lang: target };
       }
     } catch (error) {
       window.clearTimeout(timeoutId);
@@ -1785,7 +1828,9 @@ async function refreshGeoFromApiOnce() {
       ...site,
       ...apiSite,
       unesco_id: apiSite.unesco_id || site.unesco_id,
-      distance_m: apiSite.distance_m ?? site.distance_m
+      distance_m: apiSite.distance_m ?? site.distance_m,
+      server_localized: true,
+      server_localized_lang: lang
     });
   }
 
