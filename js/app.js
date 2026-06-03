@@ -1591,14 +1591,10 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
   if (uiSeq !== applySiteUiSeq) return;
 
   if (content.failed) {
-    const adName = document.getElementById("adSiteName");
     const adTeaser = document.getElementById("adTeaser");
-    const title = document.getElementById("siteDetailTitle");
     const desc = document.getElementById("siteDetailDescription");
     await Promise.all([
-      adName ? setElementI18n(adName, I18N_SV.TRANSLATION_FAILED, target) : null,
       adTeaser ? setElementI18n(adTeaser, I18N_SV.TRANSLATION_FAILED, target) : null,
-      title ? setElementI18n(title, I18N_SV.TRANSLATION_FAILED, target) : null,
       desc ? setElementI18n(desc, I18N_SV.TRANSLATION_FAILED, target) : null
     ].filter(Boolean)).catch(() => {});
     return;
@@ -1971,11 +1967,17 @@ function resetDemoState() {
   syncSitePreferenceUi().catch(() => {});
 }
 
-function resolveI18nText(source, target) {
-  if (target === "sv") {
+/** Ordbok gäller bara svenska UI-källtexter (data-i18n), inte UNESCO en→sv. */
+function resolveI18nText(source, target, sourceLang = "sv") {
+  const src = normalizeLanguageCode(sourceLang);
+  const tgt = normalizeLanguageCode(target);
+  if (src === tgt) {
     return source;
   }
-  const offlineDict = getI18nDictionary(target);
+  if (src !== "sv") {
+    return null;
+  }
+  const offlineDict = getI18nDictionary(tgt);
   return offlineDict[source] || null;
 }
 
@@ -1985,7 +1987,7 @@ async function translateUiText(text, targetLang, sourceLang = "sv") {
   if (!text?.trim() || target === source) {
     return text;
   }
-  const offline = resolveI18nText(text, target);
+  const offline = resolveI18nText(text, target, source);
   if (offline) {
     return offline;
   }
@@ -2034,7 +2036,7 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
       result[text] = translateCache.get(cacheKey);
       continue;
     }
-    const offline = resolveI18nText(text, target);
+    const offline = resolveI18nText(text, target, source);
     if (offline) {
       translateCache.set(cacheKey, offline);
       result[text] = offline;
@@ -2146,7 +2148,7 @@ async function translateViaApi(text, targetLang, sourceLang = "sv") {
     return translateCache.get(cacheKey);
   }
 
-  const offline = resolveI18nText(text, target);
+  const offline = resolveI18nText(text, target, source);
   if (offline) {
     translateCache.set(cacheKey, offline);
     return offline;
@@ -2265,7 +2267,7 @@ function buildTranslationMapSync(uniqueSources, target, source = "sv") {
       map[text] = translateCache.get(cacheKey);
       continue;
     }
-    const offline = resolveI18nText(text, target);
+    const offline = resolveI18nText(text, target, source);
     if (offline) {
       translateCache.set(cacheKey, offline);
       map[text] = offline;
