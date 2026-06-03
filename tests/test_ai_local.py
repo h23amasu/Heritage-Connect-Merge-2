@@ -36,8 +36,8 @@ def test_ai_ask_we_return_off_topic():
     assert data["needs_followup"] is True
 
 
-def test_ai_ask_falun_generic_question_no_guess():
-    """Vag fråga utan träff i källtext → ingen påhittad sammanfattning."""
+def test_ai_ask_falun_uniqueness_from_sources():
+    """Fråga om unikhet ska besvaras med citat ur UNESCO-text, inte 'inget svar'."""
     response = client.post(
         "/api/ai/ask",
         json={
@@ -48,8 +48,12 @@ def test_ai_ask_falun_generic_question_no_guess():
     )
     assert response.status_code == 200
     data = response.json()
-    assert "lokala källorna" in data["answer"].lower()
-    assert "Stora stöten" not in data["answer"]
+    assert "lokala källorna" not in data["answer"].lower()
+    lower = data["answer"].lower()
+    assert any(
+        term in lower
+        for term in ("copper", "koppar", "mining", "gruv", "outstanding", "unesco", "heritage")
+    )
 
 
 def test_ai_ask_falun_creation_not_guessed_from_random_years():
@@ -246,6 +250,60 @@ def test_ai_ask_arabic_grimeton_desc():
         or "غرايمتون" in answer
         or "فاربورغ" in answer
     )
+
+
+def test_ai_ask_acropolis_uniqueness_swedish():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 404,
+            "question": "Vad är unikt med detta världsarv?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "lokala källorna" not in data["answer"].lower()
+    lower = data["answer"].lower()
+    assert any(
+        term in lower
+        for term in ("outstanding", "universal", "symbol", "democracy", "parthenon", "unesco")
+    )
+
+
+def test_ai_ask_acropolis_uniqueness_italian():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 404,
+            "question": "Cosa rende unico questo patrimonio?",
+            "language": "it",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "local sources" not in data["answer"].lower()
+    assert "fonti locali" not in data["answer"].lower()
+    lower = data["answer"].lower()
+    assert any(
+        term in lower
+        for term in ("outstanding", "universal", "symbol", "democracy", "parthenon", "unesco")
+    )
+
+
+def test_ai_ask_acropolis_listing_year_italian():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 404,
+            "question": "Quando è diventato patrimonio mondiale?",
+            "language": "it",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "1987" in data["answer"]
+    assert "patrimonio mondiale" in data["answer"].lower()
 
 
 def test_ai_ask_keyword_citation_from_description():

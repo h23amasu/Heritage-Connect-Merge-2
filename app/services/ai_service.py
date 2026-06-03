@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 from difflib import SequenceMatcher
 from enum import Enum
 from typing import List, Optional, Tuple
@@ -85,6 +86,11 @@ _FALLBACK_NO_INFO_BY_LANG: dict[str, str] = {
         "请用描述中的词语重新提问，"
         "或询问该遗产何时列入联合国教科文组织世界遗产名录。"
     ),
+    "it": (
+        "Non ho trovato una risposta chiara alle tue domande nelle fonti locali. "
+        "Prova a riformulare con parole dalla descrizione del sito, "
+        "oppure chiedi quando il sito è diventato patrimonio mondiale UNESCO."
+    ),
 }
 _FALLBACK_WE_RETURN_BY_LANG: dict[str, str] = {
     "sv": FALLBACK_WE_RETURN_SV,
@@ -96,6 +102,7 @@ _FALLBACK_WE_RETURN_BY_LANG: dict[str, str] = {
     "ar": "لا يمكن الإجابة على هذا السؤال من مصادر التراث. اطرح سؤالاً جديداً عن الموقع نفسه.",
     "ru": "На этот вопрос нельзя ответить по источникам всемирного наследия. Задайте новый вопрос о самом объекте.",
     "zh": "无法根据世界遗产资料回答该问题。请重新提问，且问题需与这处遗产本身相关。",
+    "it": "Questa domanda non può essere risposta con le fonti del patrimonio. Fai una nuova domanda sul sito.",
 }
 
 _DECLINE_PERSONAL = "DECLINE_PERSONAL"
@@ -267,6 +274,54 @@ _LISTING_YEAR_HINTS = (
     "всемирное наследие",
     "юнеско",
     "unesco",
+    "patrimonio mondiale",
+    "patrimonio dell'umanità",
+    "patrimonio mondiale unesco",
+    "diventato patrimonio",
+    "è diventato patrimonio",
+)
+_SIGNIFICANCE_HINTS = (
+    "unikt",
+    "unique",
+    "unico",
+    "unica",
+    "einzigartig",
+    "exceptional",
+    "outstanding",
+    "särskilt",
+    "speciellt",
+    "important",
+    "viktigt",
+    "significance",
+    "signifikans",
+    "varför är",
+    "why is",
+    "why was",
+    "perché",
+    "pourquoi",
+    "warum",
+    "cosa rende",
+    "what makes",
+    "vad gör",
+    "qué hace",
+    "vad är unikt",
+    "what is unique",
+    "cosa è unico",
+)
+_SIGNIFICANCE_CONTEXT_TERMS = (
+    "outstanding",
+    "universal",
+    "exceptional",
+    "symbol",
+    "unique",
+    "greatest",
+    "embodiment",
+    "masterpiece",
+    "criterion",
+    "integrity",
+    "authenticity",
+    "unesco",
+    "world heritage",
 )
 _CREATION_HINTS = (
     "skapades",
@@ -625,6 +680,68 @@ def _split_sentences(context: str) -> list[str]:
     ]
 
 
+def _iter_search_units(context: str) -> list[str]:
+    """Delar upp långa UNESCO-avsnitt så fler meningar kan matchas mot frågan."""
+    units: list[str] = []
+    for chunk in _split_context_chunks(context):
+        if len(chunk) > 700:
+            units.extend(_split_sentences(chunk))
+        elif len(chunk) > 20:
+            units.append(chunk)
+    if units:
+        return units
+    return _split_sentences(context)
+
+
+def _asks_uniqueness_or_significance(question: str) -> bool:
+    q = (question or "").strip().lower()
+    if not q:
+        return False
+    if any(h in q for h in _SIGNIFICANCE_HINTS):
+        return True
+    return bool(
+        re.search(
+            r"\b(vad|what|cosa|qu['']?est|qué|mitä|was|che)\b.+(unikt|unique|unico|important|significant|speciell)",
+            q,
+        )
+    )
+
+
+@lru_cache(maxsize=256)
+def _translate_question_for_search(question: str, language: str) -> str:
+    lang = _normalize_language(language)
+    trimmed = (question or "").strip()[:400]
+    if not trimmed or lang == "en":
+        return trimmed
+    translated = translate_text(trimmed, lang, "en")
+    return translated if translated and translated.strip() else trimmed
+
+
+def _retrieval_terms(
+    question: str, language: str, site: Optional[dict] = None
+) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for word in _question_words(question):
+        if word not in seen:
+            terms.append(word)
+            seen.add(word)
+    if site:
+        for key in ("name", "name_en", "name_sv", "name_it"):
+            name = (site.get(key) or "").strip().lower()
+            for token in _question_tokens(name):
+                if len(token) >= 3 and token not in seen:
+                    terms.append(token)
+                    seen.add(token)
+    lang = _normalize_language(language)
+    if lang != "en":
+        for word in _question_words(_translate_question_for_search(question, lang)):
+            if word not in seen:
+                terms.append(word)
+                seen.add(word)
+    return terms
+
+
 def _split_semantic_chunks(context: str) -> list[str]:
     """
     Styckeindela tung UNESCO-text (t.ex. justification_en) vid logiska avsnitt.
@@ -707,6 +824,10 @@ def _heritage_listing_answer(site: dict, language: str) -> str:
         return f"{name} был включён в список всемирного наследия ЮНЕСКО в {year} году."
     if lang == "zh" and name:
         return f"{name}于{year}年列入联合国教科文组织世界遗产名录。"
+    if lang == "it" and name:
+        return f"{name} è stato iscritto nella lista del patrimonio mondiale UNESCO nel {year}."
+    if lang == "it":
+        return f"Il sito è stato iscritto nella lista del patrimonio mondiale UNESCO nel {year}."
     en = (
         f"{name} was inscribed as a UNESCO World Heritage Site in {year}."
         if name
@@ -759,6 +880,15 @@ def _category_answer(site: dict, language: str) -> str:
         else f"The site is listed as a {category} World Heritage property."
     )
     return _localize_answer(en, "en", lang)
+
+
+def _asks_creation_without_listing(question: str) -> bool:
+    """'När skapades' utan UNESCO-listning – ska inte plocka årtal ur brödtext."""
+    q = (question or "").lower()
+    raw = question or ""
+    has_creation = any(h in q for h in _CREATION_HINTS)
+    has_listing = any(h in q or h in raw for h in _LISTING_YEAR_HINTS)
+    return has_creation and not has_listing
 
 
 def _asks_listing_year(question: str) -> bool:
@@ -994,6 +1124,34 @@ def _intro_from_context(
     return _localize_answer(ranked[0], "en", language)
 
 
+def _significance_score(text: str) -> int:
+    lower = (text or "").lower()
+    return sum(1 for term in _SIGNIFICANCE_CONTEXT_TERMS if term in lower)
+
+
+def _significance_from_context(
+    context: str, language: str, site: Optional[dict] = None
+) -> str:
+    """Svar om vad som är unikt/viktigt – ur UNESCO-text om outstanding/universal value."""
+    units = _iter_search_units(context)
+    if not units:
+        return _intro_from_context(context, language, site=site)
+
+    ranked = sorted(
+        units,
+        key=lambda unit: (_significance_score(unit), len(unit)),
+        reverse=True,
+    )
+    top_hits = [u for u in ranked if _significance_score(u) > 0][:4]
+    if not top_hits:
+        return _intro_from_context(context, language, site=site)
+
+    joined = _join_sentences(top_hits[:3], max_sentences=3, language=language)
+    if joined:
+        return joined
+    return _localize_answer(top_hits[0], "en", language)
+
+
 def _intro_subject_matches_site(question: str, site: dict) -> bool:
     subject = _extract_intro_subject(question).lower()
     if not subject:
@@ -1008,17 +1166,30 @@ def _intro_subject_matches_site(question: str, site: dict) -> bool:
 def _cite_from_context(
     question: str, context: str, language: str, site: Optional[dict] = None
 ) -> str:
-    words = _question_words(question)
-    if not words:
+    if _asks_uniqueness_or_significance(question):
+        significance = _significance_from_context(context, language, site=site)
+        if significance:
+            return significance
+
+    terms = _retrieval_terms(question, language, site=site)
+    if not terms:
+        if _asks_site_intro(question):
+            return _intro_from_context(context, language, site=site)
         return ""
-    min_score = _min_required_word_matches(len(words))
-    sentences = _filter_sentences_for_language(_split_context_chunks(context), language)
+
+    min_score = _min_required_word_matches(len(terms))
+    if len(terms) <= 2:
+        min_score = 1
+
+    sentences = _filter_sentences_for_language(_iter_search_units(context), language)
     ranked = sorted(
         sentences,
-        key=lambda s: _sentence_relevance(s, question, words),
+        key=lambda s: _sentence_relevance(s, question, terms),
         reverse=True,
     )
-    hits = [s for s in ranked if _score_sentence(s, words) >= min_score]
+    hits = [s for s in ranked if _score_sentence(s, terms) >= min_score]
+    if not hits and ranked and _sentence_relevance(ranked[0], question, terms) >= 1.2:
+        hits = [ranked[0]]
     if not hits and _asks_site_intro(question):
         return _intro_from_context(context, language, site=site)
     if not hits:
@@ -1215,6 +1386,11 @@ def ask_ai(
     if metadata_answer:
         return metadata_answer, sources, False
 
+    if intent == QuestionIntent.HERITAGE_CONTENT and _asks_creation_without_listing(
+        question
+    ):
+        return _pick_language_fallback(language, "no_info"), sources, False
+
     if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
         openai_result = _try_openai_answer(question, context, site, language)
         if openai_result:
@@ -1228,5 +1404,12 @@ def ask_ai(
         intro = _intro_from_context(context, language, site=site)
         if intro:
             return intro, sources, False
+
+    if intent == QuestionIntent.HERITAGE_CONTENT and _asks_uniqueness_or_significance(
+        question
+    ):
+        significance = _significance_from_context(context, language, site=site)
+        if significance:
+            return significance, sources, False
 
     return _pick_language_fallback(language, "no_info"), sources, False
