@@ -468,16 +468,54 @@ const PAYMENT_COMPLETE_TOAST = {
 };
 
 let paymentToastLockUntil = 0;
+let lockedPaymentToastMessage = null;
 
-function resolveCheckoutLang() {
+/** Språk vid betalning – samma källa som Stripe (dropdown → html → Stripe locale). */
+function stripeLocaleToReaderLang(locale) {
+  if (!locale) return null;
+  const raw = String(locale).trim();
+  if (raw.startsWith("en")) return "en";
+  const code = normalizeLanguageCode(raw.split("-")[0]);
+  if (code === "nb") return "nb";
+  if (PAYMENT_COMPLETE_TOAST[code]) return code;
+  if (isValidLanguageCode(code)) return code;
+  return null;
+}
+
+function getCheckoutLangForPayment(explicitLang) {
+  if (explicitLang && isValidLanguageCode(explicitLang)) {
+    return normalizeLanguageCode(explicitLang);
+  }
   if (prototypeState.checkoutLang && isValidLanguageCode(prototypeState.checkoutLang)) {
     return normalizeLanguageCode(prototypeState.checkoutLang);
+  }
+  const select = document.getElementById("demoLanguageSelect");
+  if (select?.value && isValidLanguageCode(select.value)) {
+    return normalizeLanguageCode(select.value);
+  }
+  const htmlLang = document.documentElement.lang;
+  if (htmlLang && isValidLanguageCode(htmlLang) && htmlLang !== "sv") {
+    return normalizeLanguageCode(htmlLang);
+  }
+  const fromStripe = stripeLocaleToReaderLang(stripeLocale);
+  if (fromStripe) return fromStripe;
+  try {
+    const stored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
+    if (stored && isValidLanguageCode(stored)) {
+      return normalizeLanguageCode(stored);
+    }
+  } catch (_) {
+    /* ignore */
   }
   return getActiveReaderLang();
 }
 
+function resolveCheckoutLang() {
+  return getCheckoutLangForPayment();
+}
+
 function getPaymentCompleteToast(lang) {
-  const target = normalizeLanguageCode(lang || resolveCheckoutLang());
+  const target = getCheckoutLangForPayment(lang);
   return PAYMENT_COMPLETE_TOAST[target] || PAYMENT_COMPLETE_TOAST.en || PAYMENT_COMPLETE_TOAST.sv;
 }
 
@@ -500,11 +538,14 @@ async function ensureCheckoutLanguageReady() {
 }
 
 function showPaymentCompleteToast(lang) {
-  const message = getPaymentCompleteToast(lang);
-  paymentToastLockUntil = Date.now() + 4500;
+  const checkoutLang = getCheckoutLangForPayment(lang);
+  const message = getPaymentCompleteToast(checkoutLang);
+  lockedPaymentToastMessage = message;
+  paymentToastLockUntil = Date.now() + 8000;
   const toastEl = document.getElementById("toast");
   if (!toastEl) return;
   toastEl.textContent = message;
+  toastEl.dataset.checkoutLang = checkoutLang;
   toastEl.classList.add("show");
   if (window.__paymentToastHideTimer) {
     clearTimeout(window.__paymentToastHideTimer);
@@ -512,7 +553,8 @@ function showPaymentCompleteToast(lang) {
   window.__paymentToastHideTimer = window.setTimeout(() => {
     toastEl.classList.remove("show");
     paymentToastLockUntil = 0;
-  }, 4200);
+    lockedPaymentToastMessage = null;
+  }, 7500);
 }
 
 const RTL_LANGS = new Set(["ar", "he", "fa", "ur"]);
@@ -1495,6 +1537,8 @@ async function prepareStripePaymentStep(lang = resolveCheckoutLang()) {
     stripeClientSecret = data.client_secret;
     stripeIntentAmount = SUBSCRIPTION_PRICE_SEK;
     stripeLocale = targetStripeLocale;
+    const readerLang = stripeLocaleToReaderLang(targetStripeLocale) || getCheckoutLangForPayment(lang);
+    prototypeState.checkoutLang = readerLang;
     stripeElements = stripeClient.elements({
       clientSecret: stripeClientSecret,
       locale: targetStripeLocale,
@@ -2569,11 +2613,13 @@ function showReaderToast(svText, lang = getActiveReaderLang()) {
   }
 
   void (async () => {
+    if (Date.now() < paymentToastLockUntil) return;
     let translated = await translateUiText(svText, target, "sv");
     if (!translated || translated === svText) {
       translated =
         (await translateViaMyMemory(svText, target, "sv")) || translated || svText;
     }
+    if (Date.now() < paymentToastLockUntil) return;
     if (translated && translated !== svText) {
       toast(translated);
     }
@@ -3787,8 +3833,8 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     prototypeState.phone = normalizePhoneForApi(data.user_id);
   }
   prototypeState.last_subscription = data;
-  const lang = normalizeLanguageCode(
-    paymentFields.checkout_lang || prototypeState.checkoutLang || getActiveReaderLang()
+  const lang = getCheckoutLangForPayment(
+    paymentFields.checkout_lang || prototypeState.checkoutLang
   );
   prototypeState.checkoutLang = lang;
   document.documentElement.lang = lang;
@@ -3827,8 +3873,16 @@ async function paymentComplete() {
   }
   prototypeState.email = receiptEmail;
 
+  const lang = await ensureCheckoutLanguageReady();
+  prototypeState.checkoutLang = getCheckoutLangForPayment(lang);
+  document.documentElement.lang = prototypeState.checkoutLang;
+  try {
+    sessionStorage.setItem(READER_LANG_STORAGE_KEY, prototypeState.checkoutLang);
+  } catch (_) {
+    /* ignore */
+  }
+
   const submitBtn = document.getElementById("paymentSubmitBtn");
-  const lang = getActiveReaderLang();
   if (submitBtn) {
     submitBtn.disabled = true;
     submitBtn.textContent =
@@ -3879,7 +3933,7 @@ async function paymentComplete() {
         amount: SUBSCRIPTION_PRICE_SEK,
         payment_intent_id: paymentIntent.id,
         email: receiptEmail || undefined,
-        checkout_lang: lang,
+        checkout_lang: prototypeState.checkoutLang,
       });
       return;
     }
@@ -3902,7 +3956,7 @@ async function paymentComplete() {
       card_type: cardType,
       card_number: cardNumber,
       email: receiptEmail || undefined,
-      checkout_lang: lang,
+      checkout_lang: prototypeState.checkoutLang,
     });
   } catch (error) {
     console.warn("Prenumeration/betalning misslyckades:", error);
@@ -4527,11 +4581,14 @@ function togglePolicy(event) {
 }
 
 function toast(message) {
-  if (Date.now() < paymentToastLockUntil) {
-    return;
-  }
   const toastEl = document.getElementById("toast");
   if (!toastEl) return;
+
+  if (Date.now() < paymentToastLockUntil && lockedPaymentToastMessage) {
+    toastEl.textContent = lockedPaymentToastMessage;
+    toastEl.classList.add("show");
+    return;
+  }
 
   toastEl.textContent = message;
   toastEl.classList.add("show");
