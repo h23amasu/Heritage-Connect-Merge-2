@@ -369,6 +369,32 @@ function getUnescoSiteName(site, lang) {
   return null;
 }
 
+function siteNeedsNameTranslation(site, targetLang) {
+  const target = normalizeLanguageCode(targetLang);
+  if (getUnescoSiteName(site, target)) {
+    return false;
+  }
+  const english = (site?.name || "").trim();
+  return Boolean(english) && target !== "en";
+}
+
+function siteNeedsDescriptionTranslation(site, targetLang) {
+  const target = normalizeLanguageCode(targetLang);
+  const { text, lang: sourceLang } = pickUnescoDescriptionSource(site, target);
+  return Boolean(text?.trim()) && sourceLang !== target;
+}
+
+function formatAdTeaserText(description) {
+  if (!description?.trim()) {
+    return "";
+  }
+  const trimmed = description.trim();
+  if (trimmed.length <= 180) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 180).trimEnd()}…`;
+}
+
 /**
  * Beskrivning: UNESCO först (desc_xx), Google Translate backup från engelska.
  */
@@ -1214,46 +1240,47 @@ const currentSite = {
   language: NEWSPAPER_LANG
 };
 
-function resolveSiteNameSync(site, targetLang = getActiveReaderLang()) {
-  const localizedName = getUnescoSiteName(site, targetLang);
-  if (localizedName) return localizedName;
-  return (site?.name || "").trim();
-}
-
-function applyClosestSiteToUiSync(site) {
+/** Uppdaterar platsmetadata och avstånd – skriver aldrig engelska UNESCO-rubriker i annonsen. */
+function applyClosestSiteMetaSync(site) {
   if (!site) return;
 
   const distanceM = site.distance_m != null ? Number(site.distance_m) : null;
   const kmFormatted = formatDistanceKm(distanceM);
-  const siteName = resolveSiteNameSync(site);
 
   lastClosestSite = site;
   currentSite.api_site_id = site.id ?? currentSite.api_site_id;
   currentSite.distance_km = kmFormatted;
-  currentSite.name = siteName;
   if (site.country) currentSite.country = site.country;
   if (site.unesco_id) currentSite.site_id = String(site.unesco_id);
-
-  const adName = document.getElementById("adSiteName");
-  if (adName) {
-    adName.textContent = siteName || site.name || "";
-    adName.dataset.i18nDynamic = siteName || site.name ? "true" : "";
-  }
-
-  const title = document.getElementById("siteDetailTitle");
-  if (title) {
-    title.textContent = siteName || site.name || I18N_SV.LOADING_SITE;
-    title.dataset.i18nDynamic = siteName || site.name ? "true" : "";
-  }
 
   updateDistanceLabels();
 }
 
-function renderClosestSiteNow() {
-  const site = findClosestSiteLocal(geoState.latitude, geoState.longitude);
-  if (site) {
-    applyClosestSiteToUiSync(site);
+async function setHeritageAdLoadingState(lang = getActiveReaderLang()) {
+  const adName = document.getElementById("adSiteName");
+  const adTeaser = document.getElementById("adTeaser");
+  const title = document.getElementById("siteDetailTitle");
+  const desc = document.getElementById("siteDetailDescription");
+  const tasks = [];
+
+  if (adName) {
+    tasks.push(setElementI18n(adName, I18N_SV.LOADING_CLOSEST, lang));
   }
+  if (adTeaser) {
+    tasks.push(setElementI18n(adTeaser, I18N_SV.LOADING_SITE, lang));
+  }
+  if (title) {
+    tasks.push(setElementI18n(title, I18N_SV.LOADING_SITE, lang));
+  }
+  if (desc) {
+    tasks.push(setElementI18n(desc, I18N_SV.LOADING_SITE, lang));
+  }
+
+  await Promise.all(tasks).catch(() => {});
+}
+
+function renderClosestSiteNow() {
+  void refreshGeoFromApi();
 }
 
 function showGeoLoadingState() {
@@ -1275,8 +1302,9 @@ function showGeoLoadingState() {
 }
 
 async function refreshGeoUiSafeguard() {
+  const seq = ++applySiteUiSeq;
   if (lastClosestSite) {
-    await refreshClosestSiteTextOnly(lastClosestSite, getActiveReaderLang());
+    await refreshClosestSiteTextOnly(lastClosestSite, getActiveReaderLang(), seq);
     return;
   }
   if (LOCAL_HERITAGE_SITES.length > 0) {
@@ -1348,85 +1376,7 @@ async function translateDistanceLabels(targetLang) {
   }
 }
 
-async function refreshClosestSiteTextOnly(site, lang) {
-  if (!site) return;
-
-  const merged = mergeHeritageSiteTexts(site);
-  const target = (lang || getNewspaperLang()).toLowerCase().slice(0, 2);
-  currentSite.name = await resolveSiteName(merged, target);
-  const displayDesc = await resolveSiteDescription(merged, target);
-
-  const adName = document.getElementById("adSiteName");
-  if (adName) {
-    adName.textContent = currentSite.name || "";
-    if (currentSite.name) {
-      adName.dataset.i18nDynamic = "true";
-    } else {
-      delete adName.dataset.i18nDynamic;
-    }
-  }
-
-  const adTeaser = document.getElementById("adTeaser");
-  if (adTeaser) {
-    adTeaser.textContent = displayDesc ? `${displayDesc.slice(0, 180).trimEnd()}…` : "";
-    adTeaser.dataset.i18nDynamic = displayDesc ? "true" : "";
-  }
-
-  const title = document.getElementById("siteDetailTitle");
-  if (title && currentSite.name) {
-    title.textContent = currentSite.name;
-    title.dataset.i18nDynamic = "true";
-  }
-
-  const desc = document.getElementById("siteDetailDescription");
-  if (desc) {
-    desc.textContent = displayDesc || "";
-    desc.dataset.i18nDynamic = displayDesc ? "true" : "";
-  }
-
-  if (target === "sv") {
-    updateDistanceLabels();
-  } else {
-    updateDistanceLabels();
-    await translateDistanceLabels(target);
-  }
-}
-
-async function applyClosestSiteToUi(site) {
-  if (!site) return;
-
-  applyClosestSiteToUiSync(site);
-
-  const merged = mergeHeritageSiteTexts(site);
-  const seq = ++applySiteUiSeq;
-  const siteName = await resolveSiteName(merged);
-  if (isStaleUiApply(seq)) return;
-
-  const displayDesc = await resolveSiteDescription(merged, getActiveReaderLang());
-  if (isStaleUiApply(seq)) return;
-
-  const siteImageId = site.unesco_id || site.id;
-  const siteKey = String(siteImageId || "");
-  const adImg = document.getElementById("adSiteImage");
-  const adImgPlaceholder = document.getElementById("adImagePlaceholder");
-  const detailImg = document.getElementById("siteDetailImage");
-  const detailFallback = document.getElementById("siteDetailFallback");
-  const imagesStable =
-    siteKey &&
-    adImg?.dataset.siteId === siteKey &&
-    adImg.classList.contains("is-ready");
-
-  if (!imagesStable) {
-    const photoUrl = unescoSiteImageUrl(siteImageId) || resolveSiteImageUrl(site);
-    if (isStaleUiApply(seq)) return;
-    setSiteImage(adImg, adImgPlaceholder, photoUrl, siteName, siteImageId);
-    setSiteImage(detailImg, detailFallback, photoUrl, siteName, siteImageId);
-  }
-
-  if (isStaleUiApply(seq)) return;
-
-  currentSite.name = siteName;
-
+function applyHeritageTextToDom(siteName, displayDesc, target) {
   const adName = document.getElementById("adSiteName");
   if (adName) {
     adName.textContent = siteName || "";
@@ -1434,14 +1384,18 @@ async function applyClosestSiteToUi(site) {
       adName.dataset.i18nDynamic = "true";
     } else {
       delete adName.dataset.i18nDynamic;
-      adName.textContent = I18N_SV.LOADING_CLOSEST;
     }
   }
 
+  const teaserText = formatAdTeaserText(displayDesc);
   const adTeaser = document.getElementById("adTeaser");
   if (adTeaser) {
-    adTeaser.textContent = displayDesc ? `${displayDesc.slice(0, 180).trimEnd()}…` : "";
-    adTeaser.dataset.i18nDynamic = displayDesc ? "true" : "";
+    adTeaser.textContent = teaserText;
+    if (teaserText) {
+      adTeaser.dataset.i18nDynamic = "true";
+    } else {
+      delete adTeaser.dataset.i18nDynamic;
+    }
   }
 
   const title = document.getElementById("siteDetailTitle");
@@ -1455,22 +1409,84 @@ async function applyClosestSiteToUi(site) {
     }
   }
 
+  const desc = document.getElementById("siteDetailDescription");
+  if (desc) {
+    desc.textContent = displayDesc || "";
+    if (displayDesc) {
+      desc.dataset.i18nDynamic = "true";
+    } else {
+      delete desc.dataset.i18nDynamic;
+    }
+  }
+}
+
+async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
+  if (!site) return;
+
+  const merged = mergeHeritageSiteTexts(site);
+  const target = normalizeLanguageCode(lang || getNewspaperLang());
+  const siteName = await resolveSiteName(merged, target);
+  if (uiSeq !== applySiteUiSeq) return;
+
+  const displayDesc = await resolveSiteDescription(merged, target);
+  if (uiSeq !== applySiteUiSeq) return;
+
+  currentSite.name = siteName;
+  applyHeritageTextToDom(siteName, displayDesc, target);
+
+  if (uiSeq !== applySiteUiSeq) return;
+
+  updateDistanceLabels();
+  if (target !== "sv") {
+    await translateDistanceLabels(target);
+  }
+}
+
+async function applyClosestSiteToUi(site) {
+  if (!site) return;
+
+  const seq = ++applySiteUiSeq;
+  const lang = getActiveReaderLang();
+  const merged = mergeHeritageSiteTexts(site);
+
+  applyClosestSiteMetaSync(site);
+
+  if (
+    siteNeedsNameTranslation(merged, lang) ||
+    siteNeedsDescriptionTranslation(merged, lang)
+  ) {
+    await setHeritageAdLoadingState(lang);
+  }
+  if (isStaleUiApply(seq)) return;
+
+  const siteImageId = site.unesco_id || site.id;
+  const siteKey = String(siteImageId || "");
+  const adImg = document.getElementById("adSiteImage");
+  const adImgPlaceholder = document.getElementById("adImagePlaceholder");
+  const detailImg = document.getElementById("siteDetailImage");
+  const detailFallback = document.getElementById("siteDetailFallback");
+  const imagesStable =
+    siteKey &&
+    adImg?.dataset.siteId === siteKey &&
+    adImg.classList.contains("is-ready");
+
+  const siteNameForImage = getUnescoSiteName(merged, lang) || (merged?.name || "").trim();
+  if (!imagesStable) {
+    const photoUrl = unescoSiteImageUrl(siteImageId) || resolveSiteImageUrl(site);
+    if (isStaleUiApply(seq)) return;
+    setSiteImage(adImg, adImgPlaceholder, photoUrl, siteNameForImage, siteImageId);
+    setSiteImage(detailImg, detailFallback, photoUrl, siteNameForImage, siteImageId);
+  }
+
+  if (isStaleUiApply(seq)) return;
+
   const meta = document.getElementById("siteDetailMeta");
   if (meta) {
     const parts = [currentSite.country, site.year_inscribed].filter(Boolean);
     meta.textContent = parts.join(", ");
   }
 
-  const desc = document.getElementById("siteDetailDescription");
-  if (desc) {
-    desc.textContent = displayDesc || "";
-    desc.dataset.i18nDynamic = displayDesc ? "true" : "";
-  }
-
-  const lang = getActiveReaderLang();
-  if (lang !== "sv") {
-    await translateDistanceLabels(lang);
-  }
+  await refreshClosestSiteTextOnly(site, lang, seq);
 }
 
 async function refreshGeoFromApi() {
@@ -1492,7 +1508,6 @@ async function refreshGeoFromApiOnce() {
   const site = findClosestSiteLocal(lat, lng);
   if (!site) return;
 
-  applyClosestSiteToUiSync(site);
   await applyClosestSiteToUi(site);
 }
 
@@ -1904,7 +1919,7 @@ async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
   element.textContent = lang === "sv" ? svText : await translateUiText(svText, lang, "sv");
 }
 
-async function translateViaMyMemory(text, targetLang, sourceLang = "sv") {
+async function translateViaMyMemoryChunk(text, targetLang, sourceLang = "sv") {
   const target = (targetLang || "sv").toLowerCase().slice(0, 2);
   const source = (sourceLang || "sv").toLowerCase().slice(0, 2);
   const chunk = text.slice(0, 450);
@@ -1917,12 +1932,30 @@ async function translateViaMyMemory(text, targetLang, sourceLang = "sv") {
     const data = await response.json();
     const translated = data?.responseData?.translatedText?.trim();
     if (data?.responseStatus === 200 && translated) {
-      return text.length > 450 ? translated + text.slice(450) : translated;
+      return translated;
     }
   } catch (error) {
     console.warn("Reserv-översättning (MyMemory) misslyckades:", error);
   }
   return null;
+}
+
+async function translateViaMyMemory(text, targetLang, sourceLang = "sv") {
+  const maxChunk = 450;
+  if (text.length <= maxChunk) {
+    return translateViaMyMemoryChunk(text, targetLang, sourceLang);
+  }
+
+  let combined = "";
+  for (let offset = 0; offset < text.length; offset += maxChunk) {
+    const piece = text.slice(offset, offset + maxChunk);
+    const translated = await translateViaMyMemoryChunk(piece, targetLang, sourceLang);
+    if (!translated) {
+      return null;
+    }
+    combined += translated;
+  }
+  return combined || null;
 }
 
 async function translateViaApi(text, targetLang, sourceLang = "sv") {
@@ -1946,7 +1979,8 @@ async function translateViaApi(text, targetLang, sourceLang = "sv") {
 
   if (backendTranslateAvailable) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutMs = text.length > 400 ? 25000 : 12000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(API_ENDPOINTS.translate, {
@@ -1968,11 +2002,12 @@ async function translateViaApi(text, targetLang, sourceLang = "sv") {
         return data.translated_text;
       }
 
-      if (response.status === 400 && data?.error === "unsupported_language") {
+      if (response.status === 400 && data?.error === "invalid_language_code") {
         backendTranslateAvailable = false;
       }
     } catch (error) {
       clearTimeout(timeoutId);
+      console.warn("Översättnings-API misslyckades:", error);
     }
   }
 
@@ -2090,7 +2125,8 @@ async function applyDynamicLanguageContent(target) {
     await translateDistanceLabels(target);
   }
   if (lastClosestSite) {
-    await refreshClosestSiteTextOnly(lastClosestSite, target);
+    const seq = ++applySiteUiSeq;
+    await refreshClosestSiteTextOnly(lastClosestSite, target, seq);
   } else {
     await showGeoLoadingState();
   }
@@ -3761,6 +3797,9 @@ async function bootstrapApp() {
     await applyReaderLanguage(finalLang);
   } else {
     syncReaderLanguageUi("sv");
+    if (lastClosestSite) {
+      await refreshClosestSiteTextOnly(lastClosestSite, finalLang);
+    }
   }
 
   const urlStep = readUrlStep();

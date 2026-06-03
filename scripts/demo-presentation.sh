@@ -104,19 +104,21 @@ EOF
 }
 
 cmd_reset_falun() {
-  echo "=== Återställ: tillåt SMS om Falun igen (profil/API) ==="
-  curl -sS -X PATCH "${BASE}/api/user/preferences" \
+  echo "=== Återställ: tillåt SMS om Falun igen (demo-minne på servern) ==="
+  echo "→ POST /api/subscription/create nollställer notifieringar (fungerar på Railway)."
+  curl -sS -X POST "${BASE}/api/subscription/create" \
     -H "Content-Type: application/json" \
     -d "$(cat <<EOF
 {
   "phone": "${PHONE}",
-  "site_id": "${FALUN_SITE_ID}",
-  "visited": false
+  "channel": "sms",
+  "language": "sv",
+  "duration_days": 30
 }
 EOF
 )" | json_pretty
   echo
-  echo "→ Kör sedan 'travel' eller 'owntracks-travel' igen."
+  echo "→ Du kan få ett bekräftelse-SMS. Kör sedan 'travel' eller 'owntracks-travel' igen."
 }
 
 cmd_all() {

@@ -23,7 +23,45 @@ Leverantör (HelloSMS, SMTP) exponeras aldrig i svaret.
 
 **SMS-länkar:** Sätt `SITE_BASE_URL` till er publika app-URL (t.ex. Railway). Länken i SMS blir `{SITE_BASE_URL}/sites/{unesco_id}`.
 
-**Byta meddelandetjänst med annan grupp:** Sätt `NOTIFICATION_SERVICE_URL` till deras bas-URL. Geofencing och övriga flöden anropar då `POST {NOTIFICATION_SERVICE_URL}/api/notification/send` med samma JSON som ovan. Se `GET /api/integration/config` för aktuella URL:er.
+**Byta meddelandetjänst med annan grupp:** Sätt `NOTIFICATION_SERVICE_URL` till deras bas-URL (utan path). Geofencing och övriga flöden anropar då `POST {NOTIFICATION_SERVICE_URL}/api/notification/send` med samma JSON som ovan. Se `GET /api/integration/config` för aktuella URL:er.
+
+### Testa en annan grupps meddelandetjänst
+
+**A) Direkttest med curl (rekommenderat)** – ändra inget i Heritage Connect. Anropa **den URL gruppen skickat** (kan skilja sig från kursstandarden):
+
+```bash
+curl -i -X POST "https://www.matrixmormor.se/kulturkartan/api/notification/send.php" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "sms",
+    "to": "+46761104465",
+    "message": "Test från Heritage Connect"
+  }'
+```
+
+Visa alltid status: `-i` eller `-w "\nHTTP: %{http_code}\n"`. Tom terminal utan `-i` betyder ofta **tom body** (t.ex. HTTP 500 hos motparten), inte att det lyckades.
+
+**B) Via Railway / `.env` (`NOTIFICATION_SERVICE_URL`)** – fungerar bara om den andra gruppen har **`POST /api/notification/send`** (samma path som kursen). Heritage Connect lägger själv till `/api/notification/send` efter bas-URL.
+
+| Grupp | Deras URL | Railway `NOTIFICATION_SERVICE_URL`? |
+|-------|-----------|-------------------------------------|
+| Kursstandard | `https://app.example.com/api/notification/send` | `https://app.example.com` |
+| Matrix Mormor (exempel) | `.../api/notification/send.php` | **Nej** – annan path (`.php`) |
+
+Exempel som **fungerar** i Railway:
+
+```env
+NOTIFICATION_SERVICE_URL=https://annan-grupp.up.railway.app
+```
+
+Exempel som **inte** fungerar utan kodändring:
+
+```env
+# Fel – vi anropar .../api/notification/send, inte send.php
+NOTIFICATION_SERVICE_URL=https://www.matrixmormor.se/kulturkartan/api/notification/send.php
+```
+
+Efter ändring: redeploy och kontrollera `GET /api/integration/config` → `uses_external_notification_service: true`.
 
 **E-post:** Standard `EMAIL_PROVIDER=mock` loggar bara i servern – inget riktigt mail trots `success`. För leverans till inkorg: konfigurera SMTP/SendGrid i `.env` ([docs/EMAIL.md](EMAIL.md)).
 

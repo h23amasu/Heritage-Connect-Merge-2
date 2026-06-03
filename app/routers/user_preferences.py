@@ -6,11 +6,17 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.payment import UserVisitedSite
 from app.models.user import User
 from app.schemas import UserPreferencesRequest, UserPreferencesResponse
-from app.services.geofencing_demo import _demo_users, clear_demo_site_notified, mark_demo_site_notified
+from app.services.geofencing_demo import (
+    _demo_users,
+    _ensure_demo_user,
+    clear_demo_site_notified,
+    mark_demo_site_notified,
+)
 from app.services.auth_service import normalize_phone
 
 router = APIRouter(prefix="/api/user", tags=["User preferences"])
@@ -38,12 +44,78 @@ def _get_user(
     return None
 
 
+def _demo_preferences_key(
+    user_id: Optional[str],
+    phone: Optional[str],
+    email: Optional[str] = None,
+) -> Optional[str]:
+    return phone or email or user_id
+
+
+def _demo_preferences_response(key: str) -> UserPreferencesResponse:
+    d = _demo_users[key]
+    return UserPreferencesResponse(
+        success=True,
+        user_id=key,
+        phone=d.get("phone") or key,
+        email=d.get("email") or None,
+        notifications_paused=d.get("notifications_paused", False),
+        notification_channel=d.get("notification_channel", "sms"),
+        demo_mode=True,
+    )
+
+
+def _apply_demo_preferences_update(
+    key: str, body: UserPreferencesRequest
+) -> UserPreferencesResponse:
+    if key not in _demo_users:
+        if body.phone and "@" not in str(body.phone):
+            _ensure_demo_user(body.phone)
+        else:
+            _demo_users[key] = {
+                "phone": body.phone or "",
+                "email": body.email or "",
+                "notifications_paused": False,
+                "notification_channel": "sms",
+                "subscription_active": True,
+            }
+    d = _demo_users[key]
+    if body.notifications_paused is not None:
+        d["notifications_paused"] = body.notifications_paused
+    if body.notification_channel in ("sms", "email"):
+        d["notification_channel"] = body.notification_channel
+    if body.email:
+        d["email"] = body.email.strip().lower()
+    if body.new_phone:
+        d["phone"] = normalize_phone(body.new_phone)
+    elif body.phone:
+        d["phone"] = normalize_phone(body.phone)
+    if body.visited is not None and body.site_id:
+        notify_user = d.get("phone") or key
+        if notify_user and "@" not in str(notify_user):
+            notify_user = normalize_phone(str(notify_user))
+        if body.visited:
+            mark_demo_site_notified(notify_user, str(body.site_id))
+        else:
+            clear_demo_site_notified(notify_user, str(body.site_id))
+    return _demo_preferences_response(key)
+
+
 @router.get("/preferences", response_model=UserPreferencesResponse)
 def get_preferences(
     user_id: Optional[str] = None,
     phone: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    if settings.GEOFENCING_DEMO_MODE:
+        key = _demo_preferences_key(user_id, phone)
+        if key:
+            lookup = (
+                normalize_phone(key) if key and "@" not in str(key) else key
+            )
+            if lookup in _demo_users:
+                return _demo_preferences_response(lookup)
+
     user = _get_user(db, user_id, phone, email=None)
     if user:
         return UserPreferencesResponse(
@@ -78,6 +150,14 @@ def update_preferences(
     body: UserPreferencesRequest,
     db: Session = Depends(get_db),
 ):
+    if settings.GEOFENCING_DEMO_MODE:
+        key = _demo_preferences_key(body.user_id, body.phone, body.email)
+        if key:
+            lookup = (
+                normalize_phone(key) if "@" not in str(key) else key.strip().lower()
+            )
+            return _apply_demo_preferences_update(lookup, body)
+
     user = _get_user(db, body.user_id, body.phone, body.email)
     if user:
         if body.notifications_paused is not None:
@@ -124,42 +204,9 @@ def update_preferences(
         db.refresh(user)
         return get_preferences(user_id=str(user.id), db=db)
 
-    key = body.phone or body.email or body.user_id
+    key = _demo_preferences_key(body.user_id, body.phone, body.email)
     if key:
-        if key not in _demo_users:
-            _demo_users[key] = {
-                "phone": body.phone or "",
-                "email": body.email or "",
-                "notifications_paused": False,
-                "notification_channel": "sms",
-            }
-        d = _demo_users[key]
-        if body.notifications_paused is not None:
-            d["notifications_paused"] = body.notifications_paused
-        if body.notification_channel in ("sms", "email"):
-            d["notification_channel"] = body.notification_channel
-        if body.email:
-            d["email"] = body.email.strip().lower()
-        if body.new_phone:
-            d["phone"] = normalize_phone(body.new_phone)
-        elif body.phone:
-            d["phone"] = normalize_phone(body.phone)
-        if body.visited is not None and body.site_id:
-            notify_user = d.get("phone") or key
-            if notify_user and "@" not in str(notify_user):
-                notify_user = normalize_phone(str(notify_user))
-            if body.visited:
-                mark_demo_site_notified(notify_user, str(body.site_id))
-            else:
-                clear_demo_site_notified(notify_user, str(body.site_id))
-        return UserPreferencesResponse(
-            success=True,
-            user_id=key,
-            phone=d.get("phone") or key,
-            email=d.get("email") or None,
-            notifications_paused=d.get("notifications_paused", False),
-            notification_channel=d.get("notification_channel", "sms"),
-            demo_mode=True,
-        )
+        lookup = normalize_phone(key) if "@" not in str(key) else key.strip().lower()
+        return _apply_demo_preferences_update(lookup, body)
 
     raise HTTPException(status_code=404, detail="User not found")
