@@ -498,11 +498,28 @@
     },
   };
 
+  function normalizeLanguageCode(value) {
+    return String(value || "sv").toLowerCase().slice(0, 2);
+  }
+
   function resolveLandingLang() {
+    if (window.__LANDING_LANG__) {
+      return normalizeLanguageCode(window.__LANDING_LANG__);
+    }
     const params = new URLSearchParams(window.location.search);
     const urlLang = params.get("lang");
     if (urlLang) {
       return normalizeLanguageCode(urlLang);
+    }
+    try {
+      const cookieMatch = document.cookie.match(
+        /(?:^|;\s*)heritage_connect_reader_lang=([^;]+)/
+      );
+      if (cookieMatch?.[1]) {
+        return normalizeLanguageCode(decodeURIComponent(cookieMatch[1]));
+      }
+    } catch (_) {
+      /* ignore */
     }
     try {
       const sessionStored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
@@ -523,6 +540,12 @@
 
   function landingUiPack(code) {
     const normalized = normalizeLanguageCode(code);
+    if (
+      window.__LANDING_UI_PACK__ &&
+      normalized === normalizeLanguageCode(window.__LANDING_LANG__ || lang)
+    ) {
+      return window.__LANDING_UI_PACK__;
+    }
     return LANDING_UI[normalized] || LANDING_UI.en || LANDING_UI.sv;
   }
 
@@ -637,10 +660,6 @@
   function unescoImageUrl(unescoId) {
     if (!unescoId) return "";
     return `https://whc.unesco.org/uploads/sites/site_${unescoId}.jpg`;
-  }
-
-  function normalizeLanguageCode(value) {
-    return String(value || "sv").toLowerCase().slice(0, 2);
   }
 
   function getUnescoDescription(site, language) {

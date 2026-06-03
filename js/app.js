@@ -3494,7 +3494,9 @@ function buildSubscriptionCreatePayload(paymentFields = {}) {
     to,
     site_id: currentSite.site_id,
     site_name: currentSite.name,
-    language: getActiveReaderLang(),
+    language: getCheckoutLangForPayment(
+      paymentFields.checkout_lang || prototypeState.checkoutLang
+    ),
     subscription_type: "world_heritage_nearby",
     duration_days: prototypeState.duration_days
   };
@@ -3946,6 +3948,12 @@ async function paymentComplete() {
   document.documentElement.lang = prototypeState.checkoutLang;
   try {
     sessionStorage.setItem(READER_LANG_STORAGE_KEY, prototypeState.checkoutLang);
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    const cookieLang = encodeURIComponent(prototypeState.checkoutLang);
+    document.cookie = `heritage_connect_reader_lang=${cookieLang};path=/;max-age=31536000;SameSite=Lax`;
   } catch (_) {
     /* ignore */
   }

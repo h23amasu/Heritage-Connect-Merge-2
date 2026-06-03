@@ -12,6 +12,14 @@ def test_site_detail_url_uses_configured_base():
         )
 
 
+def test_site_detail_url_includes_lang_for_non_swedish():
+    with patch("app.services.message_builder.settings") as settings:
+        settings.SITE_BASE_URL = "https://web-production-e43d0.up.railway.app"
+        assert site_detail_url("1027", unesco_id="1027", language="it") == (
+            "https://web-production-e43d0.up.railway.app/sites/1027?lang=it"
+        )
+
+
 def test_sms_keeps_full_url_with_long_site_name():
     with patch("app.services.message_builder.settings") as settings:
         settings.SITE_BASE_URL = "https://web-production-e43d0.up.railway.app"

@@ -5,7 +5,7 @@ Kund (demo): Dagspressutgivarna AB
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -152,15 +152,11 @@ def serve_webapp():
 
 
 @app.get("/sites/{site_ref}", include_in_schema=False)
-def serve_site_landing(site_ref: str):
+def serve_site_landing(site_ref: str, request: Request):
     """Landningssida från SMS-länk – platsinfo, AI och länk till profil."""
-    return FileResponse(
-        _PROJECT_ROOT / "site-landing.html",
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-        },
-    )
+    from app.services.landing_page import serve_site_landing_response
+
+    return serve_site_landing_response(site_ref, request)
 
 
 @app.get("/config.json", include_in_schema=False)
@@ -175,5 +171,7 @@ if (_PROJECT_ROOT / "css").is_dir():
     app.mount("/css", StaticFiles(directory=_PROJECT_ROOT / "css"), name="css")
 if (_PROJECT_ROOT / "js").is_dir():
     app.mount("/js", StaticFiles(directory=_PROJECT_ROOT / "js"), name="js")
+if (_PROJECT_ROOT / "data").is_dir():
+    app.mount("/data", StaticFiles(directory=_PROJECT_ROOT / "data"), name="data")
 if (_PROJECT_ROOT / "data").is_dir():
     app.mount("/data", StaticFiles(directory=_PROJECT_ROOT / "data"), name="data")
