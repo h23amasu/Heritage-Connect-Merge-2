@@ -1,14 +1,24 @@
 """
 Bygger lokaliserade SMS/meddelanden (anvander oversattningstjansten internt).
 """
+from urllib.parse import urlencode
+
 from app.core.config import settings
 from app.services.translate_service import translate_text
 
 
-def site_detail_url(site_id: int | str, unesco_id: str | None = None) -> str:
+def site_detail_url(
+    site_id: int | str,
+    unesco_id: str | None = None,
+    language: str | None = None,
+) -> str:
     base = settings.SITE_BASE_URL.rstrip("/")
     ref = unesco_id or site_id
-    return f"{base}/sites/{ref}"
+    url = f"{base}/sites/{ref}"
+    lang = (language or "").strip().lower()[:2]
+    if not lang:
+        return url
+    return f"{url}?{urlencode({'lang': lang})}"
 
 
 def _fit_sms_with_url(prefix: str, name: str, url: str, *, max_len: int = 160) -> str:
@@ -38,8 +48,8 @@ def build_near_site_sms(
 ) -> str:
     """Standardtext for geofencing-SMS pa anvandarens sprak."""
     link_id = unesco_id or site_id
-    url = site_detail_url(link_id, unesco_id=unesco_id or None)
     lang = (language or "sv").lower()[:2]
+    url = site_detail_url(link_id, unesco_id=unesco_id or None, language=lang)
     display_name = (localized_name or site_name or "varldsarv").strip()
 
     if lang == "sv":
@@ -59,8 +69,8 @@ def build_near_site_email(
 ) -> tuple[str, str]:
     """Returnerar (subject, body) for geofencing-notis via e-post."""
     link_id = unesco_id or site_id
-    url = site_detail_url(link_id, unesco_id=unesco_id or None)
     lang = (language or "sv").lower()[:2]
+    url = site_detail_url(link_id, unesco_id=unesco_id or None, language=lang)
     display_name = (localized_name or site_name or "varldsarv").strip() or "varldsarv"
 
     sv_subject = f"Varldsarv nara dig: {display_name}"
