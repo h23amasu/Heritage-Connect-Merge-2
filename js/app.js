@@ -518,10 +518,12 @@ async function translateRemoteText(text, targetLang, sourceLang = "en") {
         const data = await response.json();
         if (response.ok && data.translated_text?.trim()) {
           const translated = data.translated_text.trim();
+          translateCache.set(cacheKey, translated);
           if (translationSucceeded(text, translated)) {
-            translateCache.set(cacheKey, translated);
             return translated;
           }
+          // API svarade men text liknar källan – använd ändå (bättre än felmeddelande).
+          return translated;
         }
         if (response.status === 400 && data?.error === "invalid_language_code") {
           backendTranslateAvailable = false;
@@ -547,30 +549,48 @@ async function translateRemoteText(text, targetLang, sourceLang = "en") {
  * Översätter annonsens UNESCO-text till läsarens språk.
  * Fakta: inbyggd desc_xx om tillräckligt lång, annars en→mål via /api/translate (samma origin först).
  */
+function serverLocalizedDescription(site, targetLang) {
+  const target = normalizeLanguageCode(targetLang);
+  const fromApi = (site?.description || "").trim();
+  const descEn = englishDescriptionForSite(site);
+  if (!fromApi) return "";
+  if (target === "en") return fromApi;
+  if (site?.server_localized && fromApi !== descEn) return fromApi;
+  if (descEn && fromApi !== descEn && fromApi.length >= 40) return fromApi;
+  return "";
+}
+
 async function translateAdHeritageContent(site, targetLang, rawSite = null) {
   const target = normalizeLanguageCode(targetLang);
   const englishName = (site?.name || "").trim();
   const englishCountry = (site?.country || rawSite?.country || "").trim();
   const descSource = adDescriptionSource(site, target);
+  const serverDesc = serverLocalizedDescription(site, target);
 
   if (target === "en") {
     return {
       name: englishName,
-      description: descSource.text,
+      description: serverDesc || descSource.text,
       country: englishCountry,
       failed: false
     };
   }
 
   const localizedName = getUnescoSiteName(site, target);
-  let name = localizedName || "";
+  let name =
+    (site?.server_localized && (site?.name || "").trim()) ||
+    localizedName ||
+    "";
   if (!name && englishName) {
     name = (await translateRemoteText(englishName, target, "en")) || englishName;
   }
 
-  let description = descSource.text;
-  if (descSource.needsTranslate) {
-    description = (await translateRemoteText(descSource.text, target, "en")) || "";
+  let description = serverDesc || descSource.text;
+  if (!serverDesc && descSource.needsTranslate) {
+    description =
+      (await translateRemoteText(descSource.text, target, "en")) ||
+      descSource.text ||
+      "";
   }
 
   let country = englishCountry;
@@ -578,13 +598,11 @@ async function translateAdHeritageContent(site, targetLang, rawSite = null) {
     country = (await translateRemoteText(englishCountry, target, "en")) || englishCountry;
   }
 
-  const failed = descSource.needsTranslate && Boolean(descSource.text) && !description?.trim();
-
   return {
     name: name || englishName,
     description,
     country,
-    failed
+    failed: false
   };
 }
 
@@ -1648,16 +1666,6 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
   const content = await translateAdHeritageContent(merged, target, site);
   if (uiSeq !== applySiteUiSeq) return;
 
-  if (content.failed) {
-    const adTeaser = document.getElementById("adTeaser");
-    const desc = document.getElementById("siteDetailDescription");
-    await Promise.all([
-      adTeaser ? setElementI18n(adTeaser, I18N_SV.TRANSLATION_FAILED, target) : null,
-      desc ? setElementI18n(desc, I18N_SV.TRANSLATION_FAILED, target) : null
-    ].filter(Boolean)).catch(() => {});
-    return;
-  }
-
   currentSite.name = content.name;
   applyHeritageTextToDom(content.name, content.description, target);
 
@@ -1727,6 +1735,29 @@ async function refreshGeoFromApi() {
   return refreshGeoTail;
 }
 
+async function fetchClosestSiteFromApi(lat, lng, lang) {
+  const target = normalizeLanguageCode(lang || getActiveReaderLang());
+  const query = `lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&lang=${encodeURIComponent(target)}`;
+  const urls = [
+    `${window.location.origin}/api/sites/closest?${query}`,
+    `${API_BASE_URL}/api/sites/closest?${query}`
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: apiRequestHeaders() });
+      if (!response.ok) continue;
+      const data = await response.json();
+      if (data?.name || data?.description) {
+        return { ...data, server_localized: true };
+      }
+    } catch (error) {
+      console.warn("Närmaste plats via API misslyckades:", url, error);
+    }
+  }
+  return null;
+}
+
 async function refreshGeoFromApiOnce() {
   if (LOCAL_HERITAGE_SITES.length === 0) {
     await loadHeritageSites();
@@ -1734,8 +1765,19 @@ async function refreshGeoFromApiOnce() {
 
   const lat = geoState.latitude;
   const lng = geoState.longitude;
-  const site = findClosestSiteLocal(lat, lng);
+  const lang = getActiveReaderLang();
+  let site = findClosestSiteLocal(lat, lng);
   if (!site) return;
+
+  const apiSite = await fetchClosestSiteFromApi(lat, lng, lang);
+  if (apiSite) {
+    site = mergeHeritageSiteTexts({
+      ...site,
+      ...apiSite,
+      unesco_id: apiSite.unesco_id || site.unesco_id,
+      distance_m: apiSite.distance_m ?? site.distance_m
+    });
+  }
 
   await applyClosestSiteToUi(site);
 }

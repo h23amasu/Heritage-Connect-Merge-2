@@ -14,22 +14,61 @@ from app.models.site import WorldHeritageSite
 from app.schemas import SiteCreate, SiteResponse
 from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site, find_site_by_ref
+from app.services.translate_service import translate_text
 from app.services.unesco_service import get_cached_sites
 
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
 
-def _demo_closest(lat: float, lng: float) -> dict:
+def _translate_field(text: str, source_lang: str, target_lang: str) -> str:
+    if not text or source_lang == target_lang:
+        return text or ""
+    translated = translate_text(text, source_lang, target_lang)
+    if translated and translated.strip() and translated.strip() != text.strip():
+        return translated.strip()
+    return text
+
+
+def _localized_site_fields(site: dict, lang: str = "sv") -> tuple[str, str, str]:
+    """Namn, beskrivning och land på läsarens språk (UNESCO-fält + översättning)."""
+    lang = (lang or "sv").lower()[:2]
+    name = (site.get("name") or "").strip()
+    country = (site.get("country") or "").strip()
+    description = _best_site_description(site, lang)
+    desc_en = (site.get("desc_en") or site.get("description") or "").strip()
+
+    if lang == "en":
+        return name, description or desc_en, country
+
+    localized_name = (site.get(f"name_{lang}") or "").strip()
+    if localized_name:
+        name = localized_name
+
+    if description and desc_en and description.strip() != desc_en.strip():
+        pass
+    elif desc_en:
+        description = _translate_field(desc_en, "en", lang)
+
+    if name and not localized_name:
+        name = _translate_field(name, "en", lang) or name
+    if country:
+        country = _translate_field(country, "en", lang) or country
+
+    return name, description, country
+
+
+def _demo_closest(lat: float, lng: float, lang: str = "sv") -> dict:
     best, dist_km = find_closest_site(lat, lng)
     if not best:
         raise HTTPException(status_code=404, detail="No sites in demo data")
     uid = str(best.get("unesco_id") or best.get("id") or "")
+    name, description, country = _localized_site_fields(best, lang)
     return {
         "id": uid,
         "unesco_id": uid,
-        "name": best.get("name"),
-        "description": best.get("desc_en") or best.get("description"),
-        "country": best.get("country"),
+        "name": name,
+        "description": description,
+        "country": country,
         "category": best.get("category"),
         "latitude": best.get("latitude"),
         "longitude": best.get("longitude"),
@@ -50,15 +89,15 @@ def _best_site_description(site: dict, lang: str = "sv") -> str:
 
 def _public_site_payload(site: dict, lang: str = "sv") -> dict:
     lang = (lang or "sv").lower()[:2]
-    description = _best_site_description(site, lang)
+    name, description, country = _localized_site_fields(site, lang)
     uid = str(site.get("unesco_id") or site.get("id") or "")
     return {
         "success": True,
         "id": uid,
         "unesco_id": uid,
-        "name": site.get("name"),
+        "name": name,
         "description": description,
-        "country": site.get("country"),
+        "country": country,
         "category": site.get("category"),
         "latitude": site.get("latitude"),
         "longitude": site.get("longitude"),
@@ -197,7 +236,7 @@ def get_closest_site(
     cached = _cache_closest(lat, lng)
     if cached:
         return cached
-    return _demo_closest(lat, lng)
+    return _demo_closest(lat, lng, lang)
 
 
 @router.get("/public/{site_ref}")
