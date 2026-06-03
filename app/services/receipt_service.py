@@ -2,7 +2,7 @@
 Skickar kvitto via gemensamma notification-API:t (e-post).
 """
 from app.schemas import NotificationRequest
-from app.services.message_builder import build_subscription_receipt_email
+from app.services.message_builder import build_subscription_confirmation_email
 from app.services.notification_service import dispatch_notification
 
 
@@ -12,8 +12,15 @@ def send_subscription_receipt(
     end_date: str,
     language: str = "sv",
     user_id: str | None = None,
+    *,
+    notification_channel: str = "sms",
 ) -> None:
-    subject, body = build_subscription_receipt_email(phone, end_date, language)
+    subject, body = build_subscription_confirmation_email(
+        phone,
+        end_date,
+        language,
+        notification_channel=notification_channel,
+    )
     request = NotificationRequest(
         channel="email",
         to=email,

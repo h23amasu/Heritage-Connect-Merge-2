@@ -49,18 +49,49 @@ def build_near_site_sms(
     return translate_text(sv_message, "sv", lang)[:160]
 
 
-def build_subscription_receipt_email(
+def owntracks_webhook_url() -> str:
+    return f"{settings.SITE_BASE_URL.rstrip('/')}/api/location/owntracks"
+
+
+def build_subscription_confirmation_email(
     phone: str,
     end_date: str,
     language: str = "sv",
+    *,
+    notification_channel: str = "sms",
 ) -> tuple[str, str]:
-    """Returnerar (subject, body) för kvitto via e-post."""
-    sv_subject = "Heritage Connect – kvitto för prenumeration"
+    """Bekräftelse + kvitto + OwnTracks-instruktioner (alltid via e-post vid prenumeration)."""
+    phone_display = (phone or "").strip() or "—"
+    webhook_url = owntracks_webhook_url()
+    channel = (notification_channel or "sms").lower()
+    channel_note = (
+        "Du får notiser via SMS när du är nära ett världsarv."
+        if channel == "sms"
+        else "Du får notiser via e-post när du är nära ett världsarv."
+    )
+
+    sv_subject = "Heritage Connect – prenumeration bekräftad"
     sv_body = (
         f"Tack för din prenumeration!\n\n"
-        f"Telefon: {phone}\n"
-        f"Prenumerationen gäller till: {end_date}\n"
+        f"Din prenumeration är nu aktiv och gäller till {end_date}.\n"
+        f"{channel_note}\n"
         f"Ingen automatisk förnyelse.\n\n"
+        f"Kontaktnummer kopplat till kontot: {phone_display}\n\n"
+        f"--- OwnTracks (GPS i bakgrunden) ---\n"
+        f"För att platsen ska fungera när telefonen är i fickan behöver du appen OwnTracks "
+        f"(iOS/Android). Webbplatsen kan inte läsa GPS hela tiden på egen hand.\n\n"
+        f"1. Ladda ner OwnTracks (App Store eller Google Play)\n"
+        f"2. Settings/Preferences → Mode: HTTP\n"
+        f"3. URL: {webhook_url}\n"
+        f"4. Identification → User: {phone_display}\n"
+        f"   (måste vara samma nummer som vid SMS-prenumeration, med landskod t.ex. +46)\n"
+        f"5. Device: valfritt, t.ex. iphone eller android\n"
+        f"6. Slå på bakgrundsspårning och platsbehörighet \"Alltid\"\n\n"
+        f"Första gången OwnTracks skickar position registreras din hemzon – då skickas "
+        f"inget larm. När du lämnar hemzonen och kommer nära ett världsarv skickas notis "
+        f"(SMS eller e-post beroende på vad du valde).\n\n"
+        f"Mer hjälp: https://owntracks.org/booklet/\n\n"
+        f"Vänliga hälsningar,\n"
         f"Heritage Connect"
     )
     lang = (language or "sv").lower()[:2]
@@ -69,4 +100,17 @@ def build_subscription_receipt_email(
     return (
         translate_text(sv_subject, "sv", lang),
         translate_text(sv_body, "sv", lang),
+    )
+
+
+def build_subscription_receipt_email(
+    phone: str,
+    end_date: str,
+    language: str = "sv",
+    *,
+    notification_channel: str = "sms",
+) -> tuple[str, str]:
+    """Bakåtkompatibelt namn – samma innehåll som bekräftelsemailet."""
+    return build_subscription_confirmation_email(
+        phone, end_date, language, notification_channel=notification_channel
     )

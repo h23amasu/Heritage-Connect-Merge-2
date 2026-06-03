@@ -219,7 +219,15 @@ const UI_MODAL_I18N = {
       "Mock payment in demo. Set PAYMENT_PROVIDER=stripe and STRIPE_SECRET_KEY in .env for real sandbox.",
     "Stripe testläge – ange kortuppgifter nedan. Testkort: 4242 4242 4242 4242.":
       "Stripe test mode – enter card details below. Test card: 4242 4242 4242 4242.",
-    "E-post för kvitto (valfritt)": "Email for receipt (optional)",
+    "E-post för bekräftelse och OwnTracks": "Email for confirmation and OwnTracks",
+    "E-post för bekräftelse (samma som prenumeration)": "Email for confirmation (same as subscription)",
+    "Alla får bekräftelse via e-post med kvitto och instruktioner för OwnTracks-appen (GPS i bakgrunden).":
+      "Everyone receives email confirmation with receipt and OwnTracks app instructions (background GPS).",
+    "Bekräftelse med OwnTracks-instruktioner har skickats till din e-post.":
+      "Confirmation with OwnTracks instructions was sent to your email.",
+    " Du fick även ett kort SMS.": " You also received a short SMS.",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Enter an email address for confirmation and OwnTracks instructions.",
     "Betala med Stripe (demo)": "Pay with Stripe (demo)",
     "Tack för din prenumeration. Prenumerationen är nu aktiv.":
       "Thank you for your subscription. Your subscription is now active.",
@@ -309,6 +317,11 @@ const I18N_SV = {
   MOBILE: "Mobilnummer",
   EMAIL: "E-postadress",
   CONFIRM_CHANNEL: "En bekräftelse skickas till vald notiskanal.",
+  CONFIRM_EMAIL_OWNOTRACKS: "Bekräftelse med OwnTracks-instruktioner har skickats till din e-post.",
+  CONFIRM_EMAIL_PLUS_SMS: " Du fick även ett kort SMS.",
+  PAYMENT_EMAIL_REQUIRED: "Ange e-post för bekräftelse och OwnTracks-instruktioner.",
+  PAYMENT_EMAIL_LABEL_SMS: "E-post för bekräftelse och OwnTracks (obligatoriskt)",
+  PAYMENT_EMAIL_LABEL_EMAIL: "E-post för bekräftelse (samma som prenumeration)",
   ACTIVE_SMS: "Aktiv kanal: SMS-notiser",
   ACTIVE_EMAIL: "Aktiv kanal: E-postnotiser",
   SAVE_CONTACT: "Spara kontaktuppgifter",
@@ -2771,7 +2784,39 @@ function selectDuration(element) {
   }
 }
 
+function resolveConfirmationEmail() {
+  const paymentField = document.getElementById("paymentReceiptEmail")?.value.trim() || "";
+  if (paymentField && paymentField.includes("@")) {
+    return paymentField;
+  }
+  if (prototypeState.channel === "email") {
+    return (prototypeState.email || "").trim();
+  }
+  return "";
+}
+
+async function syncPaymentReceiptEmailField() {
+  const input = document.getElementById("paymentReceiptEmail");
+  const label = document.querySelector('label[for="paymentReceiptEmail"]');
+  if (!input) return;
+
+  if (prototypeState.channel === "email") {
+    input.value = prototypeState.email || input.value || "";
+    input.required = true;
+    if (label) {
+      await setElementI18n(label, I18N_SV.PAYMENT_EMAIL_LABEL_EMAIL);
+    }
+  } else {
+    input.required = true;
+    if (label) {
+      await setElementI18n(label, I18N_SV.PAYMENT_EMAIL_LABEL_SMS);
+    }
+  }
+}
+
 async function updatePaymentProviderUi() {
+  await syncPaymentReceiptEmailField();
+
   const summary = document.getElementById("paymentSummaryChannel");
   if (summary) {
     const contact = getRecipientValue();
@@ -2968,9 +3013,11 @@ function buildSubscriptionCreatePayload(paymentFields = {}) {
 
   const receiptEmail =
     paymentFields.email ||
+    resolveConfirmationEmail() ||
     (prototypeState.channel === "email" ? prototypeState.email || to : null);
   if (receiptEmail && receiptEmail.includes("@")) {
     payload.email = receiptEmail;
+    prototypeState.email = receiptEmail;
   }
 
   if (paymentFields.payment_intent_id) {
@@ -3282,7 +3329,10 @@ async function updateConfirmationMessage(extra) {
       ? "En bekräftelse har skickats via e-post."
       : "En bekräftelse har skickats via SMS.";
   if (extra?.receipt_sent) {
-    text += " E-postkvitto skickades.";
+    text = I18N_SV.CONFIRM_EMAIL_OWNOTRACKS;
+    if (prototypeState.channel === "sms") {
+      text += I18N_SV.CONFIRM_EMAIL_PLUS_SMS;
+    }
   }
   if (extra?.end_date) {
     text += ` Prenumerationen gäller till ${extra.end_date}.`;
@@ -3379,7 +3429,13 @@ async function paymentComplete() {
     return;
   }
 
-  const receiptEmail = document.getElementById("paymentReceiptEmail")?.value.trim();
+  const receiptEmail = resolveConfirmationEmail();
+  if (!receiptEmail || !receiptEmail.includes("@")) {
+    toast(I18N_SV.PAYMENT_EMAIL_REQUIRED);
+    return;
+  }
+  prototypeState.email = receiptEmail;
+
   const submitBtn = document.getElementById("paymentSubmitBtn");
   if (submitBtn) {
     submitBtn.disabled = true;

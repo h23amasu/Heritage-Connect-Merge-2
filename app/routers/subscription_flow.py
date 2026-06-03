@@ -126,6 +126,7 @@ def create_subscription_flow(
         db.commit()
 
         receipt_email = email_addr if channel == "email" else (str(body.email) if body.email else "")
+        receipt_email = receipt_email.strip().lower()
         if receipt_email and "@" in receipt_email:
             background_tasks.add_task(
                 send_subscription_receipt,
@@ -134,6 +135,7 @@ def create_subscription_flow(
                 str(end),
                 body.language or user.preferred_language or "sv",
                 str(user.id),
+                notification_channel=channel,
             )
 
         return SubscriptionFlowResponse(

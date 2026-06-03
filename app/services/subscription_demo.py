@@ -12,6 +12,8 @@ from app.schemas import (
     SubscriptionFlowResponse,
     SubscriptionPauseRequest,
 )
+import zlib
+
 from app.services.auth_service import normalize_phone
 from app.clients.remote_services import deliver_notification_message
 from app.services.geofencing_demo import _demo_users, reset_demo_geofencing_user
@@ -20,6 +22,25 @@ from app.services.receipt_service import send_subscription_receipt
 from app.services.payment_service import process_payment
 
 _demo_subscriptions: dict[str, dict] = {}
+
+
+def _placeholder_phone_for_email(email: str) -> str:
+    digest = zlib.crc32(email.lower().encode("utf-8")) % 10_000_000
+    return f"+4670{digest:07d}"
+
+
+def _confirmation_email(body: SubscriptionFlowCreateRequest, channel: str) -> str:
+    return (body.email or (body.to if channel == "email" else "") or "").strip().lower()
+
+
+def _phone_for_confirmation(body: SubscriptionFlowCreateRequest, channel: str, user_key: str) -> str:
+    if channel == "sms":
+        return user_key
+    explicit = (body.phone or "").strip()
+    if explicit:
+        return normalize_phone(explicit)
+    email = _confirmation_email(body, channel)
+    return _placeholder_phone_for_email(email) if email else user_key
 
 
 def _subscription_user_key(body: SubscriptionFlowCreateRequest) -> str:
@@ -49,11 +70,14 @@ def create_demo_subscription(
     user_id = user_key
     reset_demo_geofencing_user(user_key)
 
+    account_phone = _phone_for_confirmation(body, channel, user_key)
+    confirm_email = _confirmation_email(body, channel)
+
     _demo_users.setdefault(
         user_key,
         {
-            "phone": user_key if channel == "sms" else (body.phone or ""),
-            "email": (body.email or body.to if channel == "email" else body.email or ""),
+            "phone": account_phone,
+            "email": confirm_email or (body.email or ""),
             "notification_channel": channel,
             "home_lat": None,
             "home_lng": None,
@@ -65,16 +89,20 @@ def create_demo_subscription(
     _demo_users[user_key]["subscription_active"] = True
     _demo_users[user_key]["preferred_language"] = body.language or "sv"
     _demo_users[user_key]["notification_channel"] = channel
-    if channel == "sms":
-        _demo_users[user_key]["phone"] = user_key
+    _demo_users[user_key]["phone"] = account_phone
+    if confirm_email:
+        _demo_users[user_key]["email"] = confirm_email
 
     if channel == "sms" and background_tasks:
         confirmation = NotificationRequest(
             channel="sms",
             to=user_key,
             message=(
-                "Din Heritage Connect-prenumeration är nu aktiv. "
-                "Du får nu notiser om världsarv nära dig."
+                "Din Heritage Connect-prenumeration är aktiv. "
+                "Fullständig bekräftelse med OwnTracks-instruktioner skickas till din e-post."
+                if confirm_email
+                else "Din Heritage Connect-prenumeration är nu aktiv. "
+                "Du får notiser om världsarv nära dig."
             ),
             user_id=user_key,
         )
@@ -102,16 +130,15 @@ def create_demo_subscription(
             raise ValueError("Payment failed or not completed")
         payment_id = 1 if tx_id else None
 
-    receipt_email = (body.email or (body.to if channel == "email" else None) or "").strip()
-    if receipt_email and "@" in receipt_email and background_tasks:
-        contact_for_receipt = body.phone or user_key
+    if confirm_email and "@" in confirm_email and background_tasks:
         background_tasks.add_task(
             send_subscription_receipt,
-            receipt_email,
-            contact_for_receipt,
+            confirm_email,
+            account_phone,
             str(end),
             body.language or "sv",
             user_id,
+            notification_channel=channel,
         )
 
     return SubscriptionFlowResponse(
@@ -121,7 +148,7 @@ def create_demo_subscription(
         subscription_active=True,
         payment_id=payment_id,
         end_date=str(end),
-        receipt_sent=bool(receipt_email and "@" in receipt_email),
+        receipt_sent=bool(confirm_email and "@" in confirm_email),
     )
 
 

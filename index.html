@@ -327,8 +327,9 @@
                   <p class="small-muted" id="stripePaymentHint" data-i18n>Stripe test: 4242 4242 4242 4242, valfritt framtida datum och CVC (t.ex. 123). Skarpt läge: byt till live-nycklar i Railway.</p>
                 </div>
 
-                <label for="paymentReceiptEmail" data-i18n>E-post för kvitto (valfritt)</label>
-                <input id="paymentReceiptEmail" type="email" placeholder="din@email.com" data-i18n-placeholder="din@email.com" />
+                <label for="paymentReceiptEmail" data-i18n>E-post för bekräftelse och OwnTracks</label>
+                <input id="paymentReceiptEmail" type="email" required placeholder="din@email.com" data-i18n-placeholder="din@email.com" />
+                <p class="small-muted" id="paymentReceiptHint" data-i18n>Alla får bekräftelse via e-post med kvitto och instruktioner för OwnTracks-appen (GPS i bakgrunden).</p>
 
                 <button type="button" class="full-width" id="paymentSubmitBtn" data-i18n onclick="paymentComplete()">
                   Betala och starta prenumeration
@@ -407,6 +408,6 @@
 
   <div class="toast" id="toast"></div>
   <script src="js/languages.js?v=77"></script>
-  <script src="js/app.js?v=118"></script>
+  <script src="js/app.js?v=119"></script>
 </body>
 </html>
