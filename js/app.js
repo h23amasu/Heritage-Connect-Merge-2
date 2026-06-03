@@ -8,6 +8,7 @@ const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 const LEGACY_DEFAULT_API_BASE_URL = "https://fling-sneer-margarita.ngrok-free.dev";
 const API_BASE_STORAGE_KEY = "heritage_connect_api_base_url";
 const DEMO_POSITION_STORAGE_KEY = "heritage_connect_demo_position";
+const READER_LANG_STORAGE_KEY = "heritage_connect_reader_lang";
 const API_TOKEN = "hemlig-nyckel";
 
 /** Standard vid sidladdning: `<html lang="…">` i index.html (ISO 639-1, t.ex. sv, ja, hi). */
@@ -26,6 +27,18 @@ function getActiveReaderLang() {
   if (select?.value) {
     return normalizeLanguageCode(select.value);
   }
+  try {
+    const stored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
+    if (stored && isValidLanguageCode(stored)) {
+      return normalizeLanguageCode(stored);
+    }
+  } catch (_) {
+    /* private mode */
+  }
+  const htmlLang = document.documentElement.lang;
+  if (htmlLang && isValidLanguageCode(htmlLang)) {
+    return normalizeLanguageCode(htmlLang);
+  }
   return getNewspaperLang();
 }
 
@@ -34,10 +47,17 @@ function syncDemoLanguageSelectToLang(lang) {
   const target = normalizeLanguageCode(lang || getNewspaperLang());
   preferredReaderLang = isValidLanguageCode(target) ? target : "sv";
 
+  try {
+    sessionStorage.setItem(READER_LANG_STORAGE_KEY, preferredReaderLang);
+  } catch (_) {
+    /* ignore */
+  }
+
   if (!select) return preferredReaderLang;
 
   ensureLanguageOption(select, preferredReaderLang);
   select.dataset.selectedLang = preferredReaderLang;
+  document.documentElement.lang = preferredReaderLang;
   return preferredReaderLang;
 }
 
@@ -233,6 +253,8 @@ const UI_MODAL_I18N = {
     "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
       "Enter an email address for confirmation and OwnTracks instructions.",
     "Betala med Stripe (demo)": "Pay with Stripe (demo)",
+    "Betala och starta prenumeration": "Pay and start subscription",
+    "Betalar…": "Paying…",
     "Tack för din prenumeration. Prenumerationen är nu aktiv.":
       "Thank you for your subscription. Your subscription is now active.",
     "En bekräftelse skickas till vald notiskanal.": "A confirmation will be sent to your chosen notification channel.",
@@ -2399,16 +2421,31 @@ async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
   element.textContent = lang === "sv" ? svText : await translateUiText(svText, lang, "sv");
 }
 
-async function localizedToast(svText, lang = getActiveReaderLang()) {
+function resolveToastText(svText, lang = getActiveReaderLang()) {
   const target = normalizeLanguageCode(lang);
-  if (target === "sv") {
-    toast(svText);
-    return;
+  if (!svText?.trim() || target === "sv") {
+    return svText;
   }
-
   const offline = resolveI18nText(svText, target, "sv");
   if (offline) {
-    toast(offline);
+    return offline;
+  }
+  const cacheKey = `sv|${target}|${svText}`;
+  if (translateCache.has(cacheKey)) {
+    return translateCache.get(cacheKey);
+  }
+  return null;
+}
+
+async function localizedToast(svText, lang = getActiveReaderLang()) {
+  const target = normalizeLanguageCode(lang);
+  const cached = resolveToastText(svText, target);
+  if (cached) {
+    toast(cached);
+    return;
+  }
+  if (target === "sv") {
+    toast(svText);
     return;
   }
 
@@ -2418,6 +2455,34 @@ async function localizedToast(svText, lang = getActiveReaderLang()) {
       (await translateViaMyMemory(svText, target, "sv")) || translated || svText;
   }
   toast(translated);
+}
+
+async function refreshServiceModalI18n(lang = getActiveReaderLang()) {
+  const target = normalizeLanguageCode(lang);
+  const root = document.getElementById("serviceModal");
+  if (!root) return;
+
+  if (target === "sv") {
+    await updateModalProgressTitle("sv");
+    return;
+  }
+
+  const elements = Array.from(root.querySelectorAll("[data-i18n]")).filter(
+    el => el.dataset.i18nDynamic !== "true"
+  );
+  const uniqueSources = [...new Set(elements.map(el => getI18nSource(el)).filter(Boolean))];
+  const { map: translatedMap, pending } = buildTranslationMapSync(uniqueSources, target, "sv");
+  applyTranslationMapToElements(elements, translatedMap);
+
+  if (pending.length > 0 && isActiveReaderLanguageTarget(target)) {
+    const apiMap = await translateBatchMap(pending, target, "sv");
+    if (isActiveReaderLanguageTarget(target)) {
+      Object.assign(translatedMap, apiMap);
+      applyTranslationMapToElements(elements, translatedMap);
+    }
+  }
+
+  await updateModalProgressTitle(target);
 }
 
 async function translateViaMyMemoryChunk(text, targetLang, sourceLang = "sv") {
@@ -2549,12 +2614,27 @@ async function changeDemoLanguage(lang) {
   await refreshGeoUiSafeguard();
 }
 
+function readStoredReaderLang() {
+  try {
+    const stored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
+    if (stored && isValidLanguageCode(stored)) {
+      return normalizeLanguageCode(stored);
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  const urlLang = readUrlLang();
+  if (urlLang) return urlLang;
+  return getNewspaperLang();
+}
+
 function initDemoLanguageSelect() {
   const select = document.getElementById("demoLanguageSelect");
   if (!select) return;
 
-  rebuildLanguageSelect(select, getNewspaperLang());
-  syncDemoLanguageSelectToLang(getNewspaperLang());
+  const initialLang = readStoredReaderLang();
+  rebuildLanguageSelect(select, initialLang);
+  syncDemoLanguageSelectToLang(initialLang);
 
   select.addEventListener("change", () => {
     if (!select.value) return;
@@ -2855,7 +2935,7 @@ function openModalStep(step) {
       await syncSitePreferenceUi();
     }
     scrollModalToTop(target);
-    await updateModalProgressTitle(getActiveReaderLang());
+    await refreshServiceModalI18n(getActiveReaderLang());
 
     const stepLabel = document.getElementById("stepLabel");
     if (stepLabel && target.dataset.i18nTitle) {
@@ -3548,13 +3628,23 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     prototypeState.phone = normalizePhoneForApi(data.user_id);
   }
   prototypeState.last_subscription = data;
+  const lang = getActiveReaderLang();
   updateConfirmationMessage({
     receipt_sent: data.receipt_sent,
     end_date: data.end_date,
   });
   syncSettingsChannelButtons();
   openModalStep("confirmation");
-  await localizedToast(I18N_SV.PAYMENT_COMPLETE);
+  await refreshServiceModalI18n(lang);
+  const statusBox = document.getElementById("subscriptionStatusBox");
+  if (statusBox) {
+    await setElementI18n(
+      statusBox,
+      getI18nSource(statusBox) || "Tack för din prenumeration. Prenumerationen är nu aktiv.",
+      lang
+    );
+  }
+  await localizedToast(I18N_SV.PAYMENT_COMPLETE, lang);
 
   startLocationReporting();
   window.setTimeout(() => {
@@ -3580,9 +3670,12 @@ async function paymentComplete() {
   prototypeState.email = receiptEmail;
 
   const submitBtn = document.getElementById("paymentSubmitBtn");
+  const lang = getActiveReaderLang();
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.textContent = "Betalar…";
+    submitBtn.textContent =
+      resolveToastText(I18N_SV.PAYING, lang) ||
+      (lang === "sv" ? I18N_SV.PAYING : await translateUiText(I18N_SV.PAYING, lang, "sv"));
   }
 
   try {
@@ -3663,7 +3756,14 @@ async function paymentComplete() {
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.textContent = "Betala och starta prenumeration";
+      const payLabelSource =
+        getI18nSource(submitBtn) || "Betala och starta prenumeration";
+      const activeLang = getActiveReaderLang();
+      submitBtn.textContent =
+        resolveI18nText(payLabelSource, activeLang, "sv") ||
+        (activeLang === "sv"
+          ? payLabelSource
+          : resolveToastText(payLabelSource, activeLang) || payLabelSource);
       updatePaymentProviderUi().catch(() => {});
     }
   }
