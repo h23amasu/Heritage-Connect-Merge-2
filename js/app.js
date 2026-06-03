@@ -291,6 +291,7 @@ function getI18nDictionary(lang) {
 
 const I18N_SV = {
   LOADING_SITE: "Hämtar världsarv…",
+  TRANSLATION_FAILED: "Översättningen misslyckades – försök igen.",
   LOADING_CLOSEST: "Hämtar närmaste världsarv…",
   LOADING_DISTANCE: "Hämtar avstånd…",
   LOADING_POSITION: "Hämtar din position…",
@@ -446,6 +447,87 @@ async function resolveSiteDescription(site, targetLang = getActiveReaderLang()) 
 
 function englishDescriptionForSite(site) {
   return (getUnescoDescription(site, "en") || site?.description || "").trim();
+}
+
+function translationSucceeded(source, translated) {
+  if (!translated?.trim()) return false;
+  const s = (source || "").trim();
+  const t = translated.trim();
+  return Boolean(s) && s !== t;
+}
+
+/**
+ * Översätter annonsens UNESCO-text (namn, fakta, land) från engelska till läsarens språk.
+ * Visar aldrig engelska som fallback när målspråk ≠ en.
+ */
+async function translateAdHeritageContent(site, targetLang, rawSite = null) {
+  const target = normalizeLanguageCode(targetLang);
+  const englishName = (site?.name || "").trim();
+  const englishDesc = englishDescriptionForSite(site);
+  const englishCountry = (site?.country || rawSite?.country || "").trim();
+
+  if (target === "en") {
+    return {
+      name: englishName,
+      description: englishDesc,
+      country: englishCountry,
+      failed: false
+    };
+  }
+
+  const fields = [];
+  if (englishName) fields.push({ key: "name", text: englishName });
+  if (englishDesc) fields.push({ key: "description", text: englishDesc });
+  if (englishCountry) fields.push({ key: "country", text: englishCountry });
+
+  const uniqueTexts = [...new Set(fields.map(f => f.text))];
+  let map = {};
+  if (uniqueTexts.length) {
+    map = await translateBatchMap(uniqueTexts, target, "en");
+  }
+
+  const out = { name: "", description: "", country: "", failed: false };
+
+  for (const { key, text } of fields) {
+    let translated = map[text];
+    if (!translationSucceeded(text, translated)) {
+      translated = await translateMandatory(text, target, "en");
+    }
+    if (key === "country") {
+      if (translated) out.country = translated;
+      continue;
+    }
+    if (!translated) {
+      out.failed = true;
+      continue;
+    }
+    out[key] = translated;
+  }
+
+  return out;
+}
+
+async function translateMandatory(text, targetLang, sourceLang = "en") {
+  const target = normalizeLanguageCode(targetLang);
+  const source = normalizeLanguageCode(sourceLang);
+  if (!text?.trim()) return "";
+  if (target === source) return text.trim();
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const api = await translateViaApi(text, target, source);
+    if (translationSucceeded(text, api)) {
+      return api.trim();
+    }
+  }
+
+  const mem = await translateViaMyMemory(text, target, source);
+  if (translationSucceeded(text, mem)) {
+    const cacheKey = `${source}|${target}|${text}`;
+    translateCache.set(cacheKey, mem);
+    return mem.trim();
+  }
+
+  return null;
 }
 
 async function resolveSiteCountry(country, targetLang = getActiveReaderLang()) {
@@ -1499,21 +1581,35 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
 
   const merged = mergeHeritageSiteTexts(site);
   const target = normalizeLanguageCode(lang || getNewspaperLang());
-  const siteName = await resolveSiteName(merged, target);
+
+  if (target !== "en") {
+    await setHeritageAdLoadingState(target);
+  }
   if (uiSeq !== applySiteUiSeq) return;
 
-  const displayDesc = await resolveSiteDescription(merged, target);
+  const content = await translateAdHeritageContent(merged, target, site);
   if (uiSeq !== applySiteUiSeq) return;
 
-  const displayCountry = await resolveSiteCountry(merged.country || site.country, target);
-  if (uiSeq !== applySiteUiSeq) return;
+  if (content.failed) {
+    const adName = document.getElementById("adSiteName");
+    const adTeaser = document.getElementById("adTeaser");
+    const title = document.getElementById("siteDetailTitle");
+    const desc = document.getElementById("siteDetailDescription");
+    await Promise.all([
+      adName ? setElementI18n(adName, I18N_SV.TRANSLATION_FAILED, target) : null,
+      adTeaser ? setElementI18n(adTeaser, I18N_SV.TRANSLATION_FAILED, target) : null,
+      title ? setElementI18n(title, I18N_SV.TRANSLATION_FAILED, target) : null,
+      desc ? setElementI18n(desc, I18N_SV.TRANSLATION_FAILED, target) : null
+    ].filter(Boolean)).catch(() => {});
+    return;
+  }
 
-  currentSite.name = siteName;
-  applyHeritageTextToDom(siteName, displayDesc, target);
+  currentSite.name = content.name;
+  applyHeritageTextToDom(content.name, content.description, target);
 
   const meta = document.getElementById("siteDetailMeta");
   if (meta) {
-    const parts = [displayCountry, merged.year_inscribed || site.year_inscribed].filter(Boolean);
+    const parts = [content.country, merged.year_inscribed || site.year_inscribed].filter(Boolean);
     meta.textContent = parts.join(", ");
   }
 
@@ -1530,16 +1626,18 @@ async function applyClosestSiteToUi(site) {
 
   const seq = ++applySiteUiSeq;
   const lang = getActiveReaderLang();
+  const target = normalizeLanguageCode(lang);
   const merged = mergeHeritageSiteTexts(site);
 
-  applyClosestSiteMetaSync(site);
+  await ensureHeritageTextsReady();
+  if (isStaleUiApply(seq)) return;
 
-  if (
-    siteNeedsNameTranslation(merged, lang) ||
-    siteNeedsDescriptionTranslation(merged, lang)
-  ) {
+  if (target !== "en") {
     await setHeritageAdLoadingState(lang);
   }
+  if (isStaleUiApply(seq)) return;
+
+  applyClosestSiteMetaSync(site);
   if (isStaleUiApply(seq)) return;
 
   const siteImageId = site.unesco_id || site.id;
