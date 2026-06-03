@@ -1134,6 +1134,22 @@ let stripeElements = null;
 let stripePaymentElement = null;
 let stripeClientSecret = null;
 let stripeIntentAmount = null;
+let stripeLocale = null;
+
+const STRIPE_SUPPORTED_LOCALES = new Set([
+  "ar", "bg", "cs", "da", "de", "el", "en", "en-GB", "es", "es-419",
+  "et", "fi", "fil", "fr", "fr-CA", "hr", "hu", "id", "it", "ja",
+  "ko", "lt", "lv", "ms", "mt", "nb", "nl", "pl", "pt", "pt-BR",
+  "ro", "ru", "sk", "sl", "sv", "th", "tr", "vi", "zh", "zh-HK", "zh-TW"
+]);
+
+function stripeLocaleForLang(lang) {
+  const code = normalizeLanguageCode(lang);
+  if (STRIPE_SUPPORTED_LOCALES.has(code)) {
+    return code;
+  }
+  return "auto";
+}
 
 let locationReportTimer = null;
 let geoWatchId = null;
@@ -1222,11 +1238,13 @@ function destroyStripePaymentElement() {
   stripeElements = null;
   stripeClientSecret = null;
   stripeIntentAmount = null;
+  stripeLocale = null;
 }
 
 async function prepareStripePaymentStep() {
   await loadPaymentConfig();
   await updatePaymentProviderUi();
+  const targetStripeLocale = stripeLocaleForLang(getActiveReaderLang());
 
   const mockFields = document.getElementById("mockPaymentFields");
   const stripeMount = document.getElementById("stripePaymentMount");
@@ -1244,7 +1262,8 @@ async function prepareStripePaymentStep() {
   if (
     stripeClientSecret &&
     stripeIntentAmount === SUBSCRIPTION_PRICE_SEK &&
-    stripePaymentElement
+    stripePaymentElement &&
+    stripeLocale === targetStripeLocale
   ) {
     return;
   }
@@ -1253,7 +1272,9 @@ async function prepareStripePaymentStep() {
 
   try {
     await loadStripeJs();
-    stripeClient = window.Stripe(PAYMENT_CONFIG.stripe_publishable_key);
+    stripeClient = window.Stripe(PAYMENT_CONFIG.stripe_publishable_key, {
+      locale: targetStripeLocale,
+    });
 
     const response = await fetch(API_ENDPOINTS.paymentIntent, {
       method: "POST",
@@ -1273,6 +1294,7 @@ async function prepareStripePaymentStep() {
 
     stripeClientSecret = data.client_secret;
     stripeIntentAmount = SUBSCRIPTION_PRICE_SEK;
+    stripeLocale = targetStripeLocale;
     stripeElements = stripeClient.elements({
       clientSecret: stripeClientSecret,
       appearance: { theme: "stripe" },
