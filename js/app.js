@@ -331,7 +331,7 @@ function getUnescoDescription(site, lang) {
 }
 
 /** Max tecken i annonsens faktatext (ingress). Detaljvyn visar hela texten. */
-const AD_FACT_MAX_CHARS = 480;
+const AD_FACT_MAX_CHARS = 700;
 
 function longestUnescoDescription(site) {
   let best = (site?.description || "").trim();
