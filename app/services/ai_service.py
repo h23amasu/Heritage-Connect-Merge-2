@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.models.other import AIDocument
 from app.services.heritage_sites_local import find_site_by_ref
 from app.services.pdf_loader import load_local_documents
+from app.services.whc_descriptions import combined_ai_context_text, get_whc_extended_texts
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,11 @@ _DECLINE_NO_INFO = "DECLINE_NO_INFO"
 _MIN_QUESTION_WORD_LEN = 3
 _MIN_WORD_MATCHES_SINGLE = 1
 _MIN_WORD_MATCHES_MULTI = 2
-_OPENAI_CONTEXT_MAX = 12000
+_OPENAI_CONTEXT_MAX = 20000
+_UNESCO_SECTION_SPLIT = re.compile(
+    r"(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management))",
+    re.IGNORECASE,
+)
 
 _QUESTION_STOP_WORDS = frozenset(
     {
@@ -88,6 +93,9 @@ _QUESTION_STOP_WORDS = frozenset(
         "inte",
         "the",
         "and",
+        "site",
+        "say",
+        "säger",
     }
 )
 _LISTING_YEAR_HINTS = (
@@ -166,8 +174,6 @@ _OFF_TOPIC_HINTS = (
     "price",
     "öppettider",
     "opening hours",
-    "betyder",
-    "what does",
 )
 _SITE_REFERENCE_WORDS = re.compile(
     r"\b(platsen|detta|det|den|site|heritage|världsarv|unesco|stället|objektet|här|falun|gruv)\b",
@@ -304,6 +310,8 @@ def _min_required_word_matches(word_count: int) -> int:
 
 def _is_off_topic_question(question: str) -> bool:
     q = (question or "").lower()
+    if re.search(r"what does .+ mean\b", q) or "vad betyder" in q:
+        return True
     return any(hint in q for hint in _OFF_TOPIC_HINTS)
 
 
@@ -329,11 +337,43 @@ def _split_sentences(context: str) -> list[str]:
     ]
 
 
+def _split_semantic_chunks(context: str) -> list[str]:
+    """
+    Styckeindela tung UNESCO-text (t.ex. justification_en) vid logiska avsnitt.
+    Version 1.1 – bättre än punkt-för-punkt på tusentals tecken.
+    """
+    text = (context or "").strip()
+    if not text:
+        return []
+
+    if _UNESCO_SECTION_SPLIT.search(text):
+        parts = _UNESCO_SECTION_SPLIT.split(text)
+        chunks = [p.strip() for p in parts if p.strip() and len(p.strip()) > 50]
+        if chunks:
+            return chunks
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text) if len(p.strip()) > 80]
+    if len(paragraphs) > 1:
+        return paragraphs
+
+    return []
+
+
+def _split_context_chunks(context: str) -> list[str]:
+    semantic = _split_semantic_chunks(context)
+    if semantic:
+        return semantic
+    return _split_sentences(context)
+
+
 def _join_sentences(sentences: list[str], max_sentences: int = 3, language: str = "sv") -> str:
     filtered = _filter_sentences_for_language(sentences, language)
     if not filtered:
         return ""
-    answer = ". ".join(filtered[:max_sentences])
+    selected = filtered[:max_sentences]
+    if any(len(s) > 220 for s in selected):
+        return "\n\n".join(selected)
+    answer = ". ".join(selected)
     if not answer.endswith("."):
         answer += "."
     return answer
@@ -450,9 +490,22 @@ def _heritage_site_context(site_id: int | str, language: str) -> tuple[str, list
 
     parts: list[str] = []
     sources: list[str] = []
+    uid = str(site.get("unesco_id") or site_id or "").strip()
+
+    lang = _normalize_language(language)
+    whc_text, whc_sources = combined_ai_context_text(uid)
+    if whc_text:
+        parts.append(whc_text)
+        sources.extend(whc_sources)
 
     description, source_key = _pick_site_description(site, language)
-    if description:
+    if description and (not whc_text or lang != "en"):
+        blob = "\n\n".join(parts)
+        if description not in blob:
+            parts.append(description)
+            sources.append(f"heritage-sites.json ({source_key})")
+
+    if not parts and description:
         parts.append(description)
         sources.append(f"heritage-sites.json ({source_key})")
 
@@ -485,7 +538,7 @@ def _cite_from_context(question: str, context: str, language: str) -> str:
     if not words:
         return ""
     min_score = _min_required_word_matches(len(words))
-    sentences = _filter_sentences_for_language(_split_sentences(context), language)
+    sentences = _filter_sentences_for_language(_split_context_chunks(context), language)
     ranked = sorted(
         sentences,
         key=lambda s: _sentence_relevance(s, question, words),

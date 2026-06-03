@@ -125,6 +125,36 @@ def test_classify_intent_reads_full_question():
     )
 
 
+def test_ai_ask_acropolis_parthenon_from_whc_long_text():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 404,
+            "question": "What is the Parthenon?",
+            "language": "en",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_followup"] is False
+    assert "Parthenon" in data["answer"]
+    assert "whc001.json" in " ".join(data.get("sources") or [])
+
+
+def test_ai_semantic_chunk_democracy_acropolis():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 404,
+            "question": "What does the site say about democracy?",
+            "language": "en",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "democracy" in data["answer"].lower()
+
+
 def test_ai_ask_keyword_citation_from_description():
     response = client.post(
         "/api/ai/ask",

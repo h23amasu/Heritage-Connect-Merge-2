@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from app.core.config import settings
 from app.services.unesco_service import fetch_unesco_brief_synthesis
+from app.services.whc_descriptions import get_whc_extended_texts
 
 DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "heritage-sites.json"
 
@@ -38,14 +39,29 @@ def _with_long_unesco_description(site: dict[str, Any]) -> dict[str, Any]:
     if not uid:
         return dict(site)
 
-    current = (site.get("desc_en") or site.get("description") or "").strip()
-    long_desc = fetch_unesco_brief_synthesis(uid)
-    if not long_desc or len(long_desc) <= len(current):
-        return dict(site)
-
     enriched = dict(site)
-    enriched["desc_en"] = long_desc
-    enriched["description"] = long_desc
+    current = (site.get("desc_en") or site.get("description") or "").strip()
+
+    extended = get_whc_extended_texts(uid)
+    if extended:
+        desc = (extended.get("description_en") or "").strip()
+        just = (extended.get("justification_en") or "").strip()
+        if desc:
+            enriched["description_en"] = desc
+            if len(desc) > len(current):
+                enriched["desc_en"] = desc
+                enriched["description"] = desc
+                current = desc
+        if just:
+            enriched["justification_en"] = just
+
+    if enriched.get("justification_en"):
+        return enriched
+
+    long_desc = fetch_unesco_brief_synthesis(uid)
+    if long_desc and len(long_desc) > len(current):
+        enriched["desc_en"] = long_desc
+        enriched["description"] = long_desc
     return enriched
 
 

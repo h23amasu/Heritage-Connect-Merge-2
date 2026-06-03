@@ -1,10 +1,9 @@
 """
-Uppdaterar desc_en i data/heritage-sites.json från UNESCO WHC-listan (längsta beskrivning).
+Uppdaterar heritage-sites.json med långa UNESCO-texter från data/whc001.json
+(description_en + justification_en) – samma nodstruktur som Joakim beskrev.
 
 Kör från projektroten:
   python scripts/refresh_heritage_descriptions.py
-
-Kräver nätverk (whc.unesco.org). Vid fel ändras inget.
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.services.unesco_service import enrich_sites_with_long_descriptions
+from app.services.whc_descriptions import get_whc_extended_texts
 
 HERITAGE_FILE = ROOT / "data" / "heritage-sites.json"
 
@@ -28,21 +27,37 @@ def main() -> None:
     with HERITAGE_FILE.open(encoding="utf-8") as f:
         sites = json.load(f)
 
-    enriched_sites = enrich_sites_with_long_descriptions(sites)
     updated = 0
-    for site, enriched in zip(sites, enriched_sites):
-        new_desc = (enriched.get("desc_en") or enriched.get("description") or "").strip()
+    for site in sites:
+        uid = str(site.get("unesco_id") or site.get("id") or "").strip()
+        if not uid:
+            continue
+        extended = get_whc_extended_texts(uid)
+        if not extended:
+            continue
+
+        desc = (extended.get("description_en") or "").strip()
+        just = (extended.get("justification_en") or "").strip()
         old = (site.get("desc_en") or site.get("description") or "").strip()
-        if len(new_desc) > len(old):
-            site["desc_en"] = new_desc
-            site["description"] = new_desc
+        changed = False
+
+        if desc and len(desc) >= len(old):
+            site["description_en"] = desc
+            site["desc_en"] = desc
+            site["description"] = desc
+            changed = True
+        if just:
+            site["justification_en"] = just
+            changed = True
+
+        if changed:
             updated += 1
 
     with HERITAGE_FILE.open("w", encoding="utf-8") as f:
         json.dump(sites, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
-    print(f"Klart: {updated} platser fick längre desc_en (av {len(sites)} totalt).")
+    print(f"Klart: {updated} platser uppdaterade från whc001.json (av {len(sites)} totalt).")
 
 
 if __name__ == "__main__":
