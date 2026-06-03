@@ -16,25 +16,56 @@
   const SECTION_HEADER =
     /^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*/i;
 
-  const HEADING_LABELS = {
+  /** Läsarvänliga rubriker – inga engelska UNESCO-termer i svensk UI */
+  const READER_LABELS = {
     sv: {
+      ouv: "Varför platsen är världsarv",
       "brief synthesis": "Sammanfattning",
-      integrity: "Integritet",
+      integrity: "Bevarandetillstånd",
       authenticity: "Äkthet",
       "protection and management requirements": "Skydd och förvaltning",
     },
     en: {
-      "brief synthesis": "Brief synthesis",
+      ouv: "Why this site is World Heritage",
+      "brief synthesis": "Summary",
       integrity: "Integrity",
       authenticity: "Authenticity",
       "protection and management requirements": "Protection and management",
     },
+    fi: {
+      ouv: "Miksi kohde on maailmanperintöä",
+      "brief synthesis": "Yhteenveto",
+      integrity: "Eheys",
+      authenticity: "Aitous",
+      "protection and management requirements": "Suojelu ja hoito",
+    },
+    de: {
+      ouv: "Warum die Stätte Welterbe ist",
+      "brief synthesis": "Zusammenfassung",
+      integrity: "Integrität",
+      authenticity: "Authentizität",
+      "protection and management requirements": "Schutz und Verwaltung",
+    },
+    fr: {
+      ouv: "Pourquoi ce site est classé",
+      "brief synthesis": "Synthèse",
+      integrity: "Intégrité",
+      authenticity: "Authenticité",
+      "protection and management requirements": "Protection et gestion",
+    },
+    es: {
+      ouv: "Por qué es patrimonio mundial",
+      "brief synthesis": "Síntesis",
+      integrity: "Integridad",
+      authenticity: "Autenticidad",
+      "protection and management requirements": "Protección y gestión",
+    },
   };
 
-  const OUV_HEADING = {
-    sv: "Unescos motivering (Outstanding Universal Value)",
-    en: "Outstanding Universal Value",
-  };
+  function readerLabels(targetLang) {
+    const code = normalizeLanguageCode(targetLang);
+    return READER_LABELS[code] || READER_LABELS.en;
+  }
 
   function toast(message) {
     const el = document.getElementById("toast");
@@ -83,15 +114,23 @@
 
   function localizeSectionHeading(rawTitle, targetLang) {
     const code = normalizeLanguageCode(targetLang);
-    const labels = HEADING_LABELS[code] || HEADING_LABELS.en;
+    const labels = readerLabels(targetLang);
     const key = headingKey(rawTitle);
 
     if (key.startsWith("criterion")) {
       const roman = rawTitle.match(/\([ivx]+\)/i);
-      if (code === "sv" && roman) {
-        return `Kriterium ${roman[0]}`;
+      if (!roman) {
+        return labels.criterion || "Kriterium";
       }
-      return rawTitle.trim();
+      const templates = {
+        sv: `Kriterium ${roman[0]}`,
+        en: `Criterion ${roman[0]}`,
+        fi: `Kriteeri ${roman[0]}`,
+        de: `Kriterium ${roman[0]}`,
+        fr: `Critère ${roman[0]}`,
+        es: `Criterio ${roman[0]}`,
+      };
+      return templates[code] || templates.en;
     }
 
     return labels[key] || rawTitle.trim();
@@ -221,11 +260,11 @@
   }
 
   function appendJustificationSections(container, sections, targetLang) {
-    const code = normalizeLanguageCode(targetLang);
+    const labels = readerLabels(targetLang);
     const section = document.createElement("section");
     section.className = "landing-desc-section";
     const h3 = document.createElement("h3");
-    h3.textContent = OUV_HEADING[code] || OUV_HEADING.en;
+    h3.textContent = labels.ouv;
     section.appendChild(h3);
 
     sections.forEach(item => {
