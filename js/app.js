@@ -20,12 +20,14 @@ function getNewspaperLang() {
 let preferredReaderLang = null;
 
 function getActiveReaderLang() {
-  if (preferredReaderLang) {
-    return normalizeLanguageCode(preferredReaderLang);
-  }
   const select = document.getElementById("demoLanguageSelect");
-  if (select?.value) {
-    return normalizeLanguageCode(select.value);
+  if (select?.value && isValidLanguageCode(select.value)) {
+    const fromSelect = normalizeLanguageCode(select.value);
+    preferredReaderLang = fromSelect;
+    return fromSelect;
+  }
+  if (preferredReaderLang && isValidLanguageCode(preferredReaderLang)) {
+    return normalizeLanguageCode(preferredReaderLang);
   }
   try {
     const stored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
@@ -323,6 +325,7 @@ const TOAST_I18N_ENTRIES = {
   en: {
     "Betalning genomförd. Prenumerationen är aktiv.": "Payment completed. Your subscription is active.",
     "Inloggning genomförd via e-post.": "Signed in via email.",
+    "Inloggning genomförd via API.": "Signed in via API.",
     "Stripe laddas – försök igen om ett ögonblick.": "Stripe is loading – try again in a moment.",
     "Betalningen kunde inte bekräftas.": "Payment could not be confirmed.",
     "Ange ett giltigt kortnummer (test).": "Enter a valid card number (test).",
@@ -2411,17 +2414,7 @@ async function translateBatchMap(texts, targetLang, sourceLang = "sv") {
   return result;
 }
 
-async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
-  if (!element) return;
-  registerI18nSource(element, svText);
-  delete element.dataset.i18nDynamic;
-  if (!element.hasAttribute("data-i18n")) {
-    element.setAttribute("data-i18n", "");
-  }
-  element.textContent = lang === "sv" ? svText : await translateUiText(svText, lang, "sv");
-}
-
-function resolveToastText(svText, lang = getActiveReaderLang()) {
+function resolveReaderText(svText, lang = getActiveReaderLang()) {
   const target = normalizeLanguageCode(lang);
   if (!svText?.trim() || target === "sv") {
     return svText;
@@ -2437,24 +2430,64 @@ function resolveToastText(svText, lang = getActiveReaderLang()) {
   return null;
 }
 
-async function localizedToast(svText, lang = getActiveReaderLang()) {
-  const target = normalizeLanguageCode(lang);
-  const cached = resolveToastText(svText, target);
-  if (cached) {
-    toast(cached);
-    return;
+function applyElementI18nSync(element, svText, lang = getActiveReaderLang()) {
+  if (!element) return;
+  registerI18nSource(element, svText);
+  delete element.dataset.i18nDynamic;
+  if (!element.hasAttribute("data-i18n")) {
+    element.setAttribute("data-i18n", "");
   }
-  if (target === "sv") {
-    toast(svText);
+  const target = normalizeLanguageCode(lang);
+  const translated = resolveReaderText(svText, target);
+  element.textContent = translated || svText;
+}
+
+async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
+  if (!element) return;
+  const target = normalizeLanguageCode(lang);
+  applyElementI18nSync(element, svText, target);
+  if (target === "sv") return;
+
+  const current = element.textContent?.trim();
+  const source = svText?.trim();
+  if (current && source && current !== source) {
     return;
   }
 
-  let translated = await translateUiText(svText, target, "sv");
-  if (!translated || translated === svText) {
-    translated =
-      (await translateViaMyMemory(svText, target, "sv")) || translated || svText;
+  const translated = await translateUiText(svText, target, "sv");
+  if (translated && translated !== svText) {
+    element.textContent = translated;
+    translateCache.set(`sv|${target}|${svText}`, translated);
   }
-  toast(translated);
+}
+
+function resolveToastText(svText, lang = getActiveReaderLang()) {
+  return resolveReaderText(svText, lang);
+}
+
+function showReaderToast(svText, lang = getActiveReaderLang()) {
+  const target = normalizeLanguageCode(lang);
+  const immediate = resolveReaderText(svText, target);
+  toast(immediate || svText);
+
+  if (target === "sv" || !svText?.trim() || (immediate && immediate !== svText)) {
+    return;
+  }
+
+  void (async () => {
+    let translated = await translateUiText(svText, target, "sv");
+    if (!translated || translated === svText) {
+      translated =
+        (await translateViaMyMemory(svText, target, "sv")) || translated || svText;
+    }
+    if (translated && translated !== svText) {
+      toast(translated);
+    }
+  })();
+}
+
+async function localizedToast(svText, lang = getActiveReaderLang()) {
+  showReaderToast(svText, lang);
 }
 
 async function refreshServiceModalI18n(lang = getActiveReaderLang()) {
@@ -2615,6 +2648,8 @@ async function changeDemoLanguage(lang) {
 }
 
 function readStoredReaderLang() {
+  const urlLang = readUrlLang();
+  if (urlLang) return urlLang;
   try {
     const stored = sessionStorage.getItem(READER_LANG_STORAGE_KEY);
     if (stored && isValidLanguageCode(stored)) {
@@ -2623,8 +2658,6 @@ function readStoredReaderLang() {
   } catch (_) {
     /* ignore */
   }
-  const urlLang = readUrlLang();
-  if (urlLang) return urlLang;
   return getNewspaperLang();
 }
 
@@ -3226,7 +3259,7 @@ function buildSubscriptionCreatePayload(paymentFields = {}) {
     to,
     site_id: currentSite.site_id,
     site_name: currentSite.name,
-    language: currentSite.language || NEWSPAPER_LANG,
+    language: getActiveReaderLang(),
     subscription_type: "world_heritage_nearby",
     duration_days: prototypeState.duration_days
   };
@@ -3409,7 +3442,7 @@ async function loginWithSmsCode() {
     syncSettingsChannelButtons();
     openModalStep("confirmation");
     startLocationReporting();
-    toast("Inloggning genomförd via API.");
+    showReaderToast("Inloggning genomförd via API.");
   } catch (error) {
     console.warn("verify-code misslyckades:", error);
     toast("Kunde inte nå API – kontrollera att uvicorn körs.");
@@ -3629,22 +3662,23 @@ async function completeSubscriptionAfterPayment(paymentFields) {
   }
   prototypeState.last_subscription = data;
   const lang = getActiveReaderLang();
+  document.documentElement.lang = lang;
   updateConfirmationMessage({
     receipt_sent: data.receipt_sent,
     end_date: data.end_date,
   });
   syncSettingsChannelButtons();
   openModalStep("confirmation");
-  await refreshServiceModalI18n(lang);
   const statusBox = document.getElementById("subscriptionStatusBox");
   if (statusBox) {
-    await setElementI18n(
+    applyElementI18nSync(
       statusBox,
       getI18nSource(statusBox) || "Tack för din prenumeration. Prenumerationen är nu aktiv.",
       lang
     );
   }
-  await localizedToast(I18N_SV.PAYMENT_COMPLETE, lang);
+  await refreshServiceModalI18n(lang);
+  showReaderToast(I18N_SV.PAYMENT_COMPLETE, lang);
 
   startLocationReporting();
   window.setTimeout(() => {
