@@ -91,14 +91,31 @@ def fetch_unesco_remote() -> list[dict]:
     return _normalize_sites(sites, source="unesco_json")
 
 
+def _extract_whc_description(item: dict) -> str:
+    """Längsta tillgängliga UNESCO-beskrivning (öppna list-API:t varierar per fält)."""
+    candidates = [
+        item.get("long_description"),
+        item.get("description"),
+        item.get("short_description"),
+    ]
+    best = ""
+    for raw in candidates:
+        text = (raw or "").strip() if isinstance(raw, str) else ""
+        if len(text) > len(best):
+            best = text
+    return best
+
+
 def _map_whc_item(item: dict) -> dict:
     lat = item.get("latitude") or item.get("lat")
     lng = item.get("longitude") or item.get("lng") or item.get("lon")
     unesco_id = str(item.get("id_no") or item.get("id") or item.get("unesco_id") or "")
+    description = _extract_whc_description(item)
     return {
         "unesco_id": unesco_id,
         "name": item.get("site") or item.get("name") or "Unknown",
-        "description": item.get("short_description") or item.get("description") or "",
+        "description": description,
+        "desc_en": description,
         "country": item.get("states") or item.get("country") or "",
         "category": item.get("category") or "",
         "latitude": float(lat) if lat is not None else None,
@@ -115,10 +132,12 @@ def _normalize_sites(sites: list[dict], source: str) -> list[dict]:
             continue
         lat = s.get("latitude")
         lng = s.get("longitude")
+        desc = (s.get("description") or "").strip()
         out.append({
             "unesco_id": str(s.get("unesco_id") or s.get("id") or ""),
             "name": s["name"],
-            "description": s.get("description") or "",
+            "description": desc,
+            "desc_en": s.get("desc_en") or desc,
             "country": s.get("country") or "",
             "category": s.get("category") or "",
             "latitude": lat,

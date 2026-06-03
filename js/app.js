@@ -330,28 +330,20 @@ function getUnescoDescription(site, lang) {
 }
 
 function pickUnescoDescriptionSource(site, targetLang) {
-  const target = (targetLang || "sv").toLowerCase().slice(0, 2);
+  const target = normalizeLanguageCode(targetLang);
   const localized = getUnescoDescription(site, target);
-  const english = getUnescoDescription(site, "en") || site?.description || "";
+  const english = englishDescriptionForSite(site);
 
-  if (localized) {
-    if (target === "sv") {
-      return { text: localized, lang: target };
-    }
-    // desc_xx kan vara korta introtexter – använd full UNESCO-text när den finns.
-    if (english && localized.length < english.length * 0.6) {
-      return { text: english, lang: "en" };
-    }
-    return { text: localized, lang: target };
+  if (target === "en") {
+    return { text: english || localized || "", lang: "en" };
+  }
+
+  if (localized?.trim()) {
+    return { text: localized.trim(), lang: target };
   }
 
   if (english) {
     return { text: english, lang: "en" };
-  }
-
-  const swedish = getUnescoDescription(site, "sv");
-  if (swedish) {
-    return { text: swedish, lang: "sv" };
   }
 
   return { text: "", lang: target };
@@ -399,25 +391,52 @@ function formatAdTeaserText(description) {
  * Beskrivning: UNESCO först (desc_xx), Google Translate backup från engelska.
  */
 async function resolveSiteDescription(site, targetLang = getActiveReaderLang()) {
-  const target = (targetLang || "sv").toLowerCase().slice(0, 2);
+  const target = normalizeLanguageCode(targetLang);
   const { text: sourceText, lang: sourceLang } = pickUnescoDescriptionSource(site, target);
 
-  if (!sourceText) {
+  if (!sourceText?.trim()) {
     return "";
   }
 
-  if (target === sourceLang) {
+  const source = normalizeLanguageCode(sourceLang);
+  if (target === source) {
     return sourceText;
   }
 
-  return translateViaApi(sourceText, target, sourceLang);
+  const translated = await translateViaApi(sourceText, target, source);
+  if (translated?.trim()) {
+    return translated;
+  }
+
+  const english = englishDescriptionForSite(site);
+  if (english && source !== "en") {
+    return translateViaApi(english, target, "en");
+  }
+
+  return sourceText;
+}
+
+function englishDescriptionForSite(site) {
+  return (getUnescoDescription(site, "en") || site?.description || "").trim();
+}
+
+async function resolveSiteCountry(country, targetLang = getActiveReaderLang()) {
+  const text = (country || "").trim();
+  if (!text) return "";
+
+  const target = normalizeLanguageCode(targetLang);
+  if (target === "en") {
+    return text;
+  }
+
+  return translateViaApi(text, target, "en");
 }
 
 /**
  * Rubrik: UNESCO-officiellt namn (fältet name + name_xx), översatt från engelska vid behov.
  */
 async function resolveSiteName(site, targetLang = getActiveReaderLang()) {
-  const target = (targetLang || "sv").toLowerCase().slice(0, 2);
+  const target = normalizeLanguageCode(targetLang);
 
   const localizedName = getUnescoSiteName(site, target);
   if (localizedName) {
@@ -433,7 +452,8 @@ async function resolveSiteName(site, targetLang = getActiveReaderLang()) {
     return officialEnglish;
   }
 
-  return translateViaApi(officialEnglish, target, "en");
+  const translated = await translateViaApi(officialEnglish, target, "en");
+  return translated?.trim() || officialEnglish;
 }
 
 let lastClosestSite = null;
@@ -615,6 +635,7 @@ let LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
 /** Full UNESCO-post per unesco_id – texter även när geo-filen saknar desc_xx. */
 const HERITAGE_TEXT_BY_ID = new Map();
 let heritageSitesLoadPromise = null;
+let heritageTextsReady = false;
 
 function indexHeritageSiteTexts(sites) {
   if (!Array.isArray(sites)) return;
@@ -636,43 +657,65 @@ function mergeHeritageSiteTexts(site) {
   return { ...full, ...site, ...textFields };
 }
 
-async function enrichHeritageSitesFromFullData() {
-  try {
-    const response = await fetch("data/heritage-sites.json");
-    if (!response.ok) return;
-    const fullSites = await response.json();
-    if (Array.isArray(fullSites) && fullSites.length > 0) {
-      indexHeritageSiteTexts(fullSites);
-      LOCAL_HERITAGE_SITES = fullSites;
-      console.info(`UNESCO fullständig databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-    }
-  } catch (error) {
-    console.debug("Kunde inte ladda fullständig UNESCO-data i bakgrunden.", error);
+function applyFullHeritageDataset(fullSites) {
+  if (!Array.isArray(fullSites) || fullSites.length === 0) {
+    return false;
   }
+  indexHeritageSiteTexts(fullSites);
+  LOCAL_HERITAGE_SITES = fullSites;
+  heritageTextsReady = true;
+  console.info(`UNESCO-databas laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
+  return true;
+}
+
+async function ensureHeritageTextsReady() {
+  if (heritageTextsReady && HERITAGE_TEXT_BY_ID.size > 0) {
+    return;
+  }
+  await loadHeritageSites();
 }
 
 async function loadHeritageSitesOnce() {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      const response = await fetch("data/heritage-sites.json");
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const fullSites = await response.json();
+      if (applyFullHeritageDataset(fullSites)) {
+        return LOCAL_HERITAGE_SITES;
+      }
+      throw new Error("Tom UNESCO-databas");
+    } catch (err) {
+      if (attempt < 2) {
+        await new Promise(resolve => window.setTimeout(resolve, 400 * (attempt + 1)));
+        continue;
+      }
+      console.warn("Kunde inte ladda heritage-sites.json, försöker geo-fallback.", err);
+    }
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
       const response = await fetch("data/heritage-geo.json");
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      LOCAL_HERITAGE_SITES = await response.json();
-      indexHeritageSiteTexts(LOCAL_HERITAGE_SITES);
-      console.info(`UNESCO-geodata laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
-      await enrichHeritageSitesFromFullData();
+      const geoSites = await response.json();
+      indexHeritageSiteTexts(geoSites);
+      LOCAL_HERITAGE_SITES = geoSites;
+      heritageTextsReady = HERITAGE_TEXT_BY_ID.size > 0;
+      console.info(`UNESCO-geodata (fallback) laddad: ${LOCAL_HERITAGE_SITES.length} platser.`);
       return LOCAL_HERITAGE_SITES;
     } catch (err) {
-      if (attempt < 2) {
-        await new Promise(resolve => window.setTimeout(resolve, 250 * (attempt + 1)));
-        continue;
-      }
       console.warn("Kunde inte ladda UNESCO-geodata.", err);
-      LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
-      return LOCAL_HERITAGE_SITES;
     }
   }
+
+  LOCAL_HERITAGE_SITES = SWEDISH_GEO_FALLBACK.slice();
+  indexHeritageSiteTexts(LOCAL_HERITAGE_SITES);
+  heritageTextsReady = true;
   return LOCAL_HERITAGE_SITES;
 }
 
@@ -1423,6 +1466,9 @@ function applyHeritageTextToDom(siteName, displayDesc, target) {
 async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
   if (!site) return;
 
+  await ensureHeritageTextsReady();
+  if (uiSeq !== applySiteUiSeq) return;
+
   const merged = mergeHeritageSiteTexts(site);
   const target = normalizeLanguageCode(lang || getNewspaperLang());
   const siteName = await resolveSiteName(merged, target);
@@ -1431,8 +1477,17 @@ async function refreshClosestSiteTextOnly(site, lang, uiSeq = applySiteUiSeq) {
   const displayDesc = await resolveSiteDescription(merged, target);
   if (uiSeq !== applySiteUiSeq) return;
 
+  const displayCountry = await resolveSiteCountry(merged.country || site.country, target);
+  if (uiSeq !== applySiteUiSeq) return;
+
   currentSite.name = siteName;
   applyHeritageTextToDom(siteName, displayDesc, target);
+
+  const meta = document.getElementById("siteDetailMeta");
+  if (meta) {
+    const parts = [displayCountry, merged.year_inscribed || site.year_inscribed].filter(Boolean);
+    meta.textContent = parts.join(", ");
+  }
 
   if (uiSeq !== applySiteUiSeq) return;
 
@@ -1479,12 +1534,6 @@ async function applyClosestSiteToUi(site) {
   }
 
   if (isStaleUiApply(seq)) return;
-
-  const meta = document.getElementById("siteDetailMeta");
-  if (meta) {
-    const parts = [currentSite.country, site.year_inscribed].filter(Boolean);
-    meta.textContent = parts.join(", ");
-  }
 
   await refreshClosestSiteTextOnly(site, lang, seq);
 }
