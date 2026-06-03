@@ -53,6 +53,20 @@ def get_whc_extended_texts(unesco_id: str) -> Optional[dict[str, str]]:
     }
 
 
+def landing_description_fields(unesco_id: str) -> dict[str, str]:
+    """Långa UNESCO-texter för landningssidan (/sites/{id})."""
+    extended = get_whc_extended_texts(unesco_id)
+    if not extended:
+        return {
+            "description_en": "",
+            "justification_en": "",
+        }
+    return {
+        "description_en": extended.get("description_en") or "",
+        "justification_en": extended.get("justification_en") or "",
+    }
+
+
 def combined_ai_context_text(unesco_id: str) -> tuple[str, list[str]]:
     """Full English UNESCO narrative for AI (description + justification)."""
     extended = get_whc_extended_texts(unesco_id)

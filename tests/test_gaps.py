@@ -19,8 +19,18 @@ def test_public_site_by_unesco_id():
     assert data["success"] is True
     assert data["unesco_id"] == "1027"
     assert "Falun" in data["name"]
-    assert "Stora stöten" in data["description"]
-    assert "Great Pit" not in data["description"]
+    assert data["has_long_description"] is True
+    assert len(data["description_en"]) > 400
+    assert len(data["justification_en"]) > 3000
+    assert "Stora stöten" in data["description_short"]
+
+
+def test_public_site_acropolis_long_fields():
+    response = client.get("/api/sites/public/404?lang=en")
+    assert response.status_code == 200
+    data = response.json()
+    assert "Parthenon" in data["description_en"]
+    assert "Criterion" in data["justification_en"]
 
 
 def test_site_landing_html():

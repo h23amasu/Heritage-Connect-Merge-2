@@ -15,6 +15,7 @@ from app.schemas import SiteCreate, SiteResponse
 from app.services.geofencing_service import haversine_km
 from app.services.heritage_sites_local import find_closest_site, find_site_by_ref
 from app.services.unesco_service import get_cached_sites
+from app.services.whc_descriptions import landing_description_fields
 
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
@@ -71,16 +72,43 @@ def _best_site_description(site: dict, lang: str = "sv") -> str:
     return localized or desc_en or ""
 
 
+def _short_localized_description(site: dict, lang: str) -> str:
+    """Kort platsrad (t.ex. desc_sv) – oberoende av långa whc001-texter."""
+    lang = (lang or "sv").lower()[:2]
+    localized = (site.get(f"desc_{lang}") or "").strip()
+    if localized:
+        return localized
+    return (site.get("desc_en") or site.get("description") or "").strip()
+
+
 def _public_site_payload(site: dict, lang: str = "sv") -> dict:
     lang = (lang or "sv").lower()[:2]
-    name, description, country = _localized_site_fields(site, lang)
+    name = (site.get(f"name_{lang}") or site.get("name") or "").strip()
+    country = (site.get("country") or "").strip()
+    description_short = _short_localized_description(site, lang)
     uid = str(site.get("unesco_id") or site.get("id") or "")
+    long_texts = landing_description_fields(uid)
+    description_en = (
+        long_texts.get("description_en")
+        or site.get("description_en")
+        or site.get("desc_en")
+        or site.get("description")
+        or ""
+    ).strip()
+    justification_en = (
+        long_texts.get("justification_en") or site.get("justification_en") or ""
+    ).strip()
+    has_long = bool(description_en or justification_en)
     return {
         "success": True,
         "id": uid,
         "unesco_id": uid,
         "name": name,
-        "description": description,
+        "description": description_en or description_short,
+        "description_short": description_short,
+        "description_en": description_en,
+        "justification_en": justification_en,
+        "has_long_description": has_long,
         "country": country,
         "category": site.get("category"),
         "latitude": site.get("latitude"),

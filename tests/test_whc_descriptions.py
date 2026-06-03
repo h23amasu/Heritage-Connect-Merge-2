@@ -1,5 +1,9 @@
 """whc001.json – description_en och justification_en."""
-from app.services.whc_descriptions import combined_ai_context_text, get_whc_extended_texts
+from app.services.whc_descriptions import (
+    combined_ai_context_text,
+    get_whc_extended_texts,
+    landing_description_fields,
+)
 
 
 def test_whc_404_acropolis_texts():
@@ -9,6 +13,12 @@ def test_whc_404_acropolis_texts():
     assert "Parthenon" in extended["description_en"]
     assert len(extended["justification_en"]) > 5000
     assert "Democracy" in extended["justification_en"] or "democracy" in extended["justification_en"].lower()
+
+
+def test_landing_description_fields():
+    fields = landing_description_fields("1027")
+    assert len(fields["description_en"]) > 400
+    assert len(fields["justification_en"]) > 3000
 
 
 def test_combined_ai_context_includes_both_fields():
