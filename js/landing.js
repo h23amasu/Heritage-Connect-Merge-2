@@ -21,6 +21,7 @@
       SITE_NOT_FOUND: "Platsen kunde inte hittas.",
       GO_TO_HC: "Gå till Heritage Connect",
       LOADING_UNESCO: "Laddar UNESCO-text…",
+      LOADING_UNESCO_PROGRESS: "Laddar UNESCO-text ({current}/{total})…",
       NO_DESCRIPTION: "Ingen beskrivning tillgänglig.",
       UNESCO_LOAD_ERROR:
         "Kunde inte visa hela UNESCO-texten just nu. Du kan fortfarande ställa frågor till AI nedan.",
@@ -47,6 +48,7 @@
       SITE_NOT_FOUND: "The site could not be found.",
       GO_TO_HC: "Go to Heritage Connect",
       LOADING_UNESCO: "Loading UNESCO text…",
+      LOADING_UNESCO_PROGRESS: "Loading UNESCO text ({current}/{total})…",
       NO_DESCRIPTION: "No description available.",
       UNESCO_LOAD_ERROR:
         "Could not show the full UNESCO text right now. You can still ask the AI below.",
@@ -73,6 +75,7 @@
       SITE_NOT_FOUND: "Il sito non è stato trovato.",
       GO_TO_HC: "Vai a Heritage Connect",
       LOADING_UNESCO: "Caricamento testo UNESCO…",
+      LOADING_UNESCO_PROGRESS: "Caricamento testo UNESCO ({current}/{total})…",
       NO_DESCRIPTION: "Nessuna descrizione disponibile.",
       UNESCO_LOAD_ERROR:
         "Impossibile mostrare l'intero testo UNESCO al momento. Puoi comunque porre domande all'IA qui sotto.",
@@ -649,6 +652,10 @@
   const SECTION_HEADER =
     /^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*/i;
 
+  /** Google Translate hanterar ~5000 tecken – dela större UNESCO-block innan API-anrop. */
+  const MAX_TRANSLATE_CHUNK = 4500;
+  const MAX_BLOCK_CHARS = 5500;
+
   function toast(message) {
     const el = document.getElementById("toast");
     if (!el) return;
@@ -709,7 +716,46 @@
     return raw
       .split(SECTION_SPLIT)
       .map(part => stripUnescoHeaders(part))
-      .filter(part => part.length > 40);
+      .filter(part => part.length > 20);
+  }
+
+  function splitOversizedBlocks(blocks) {
+    const result = [];
+    for (const block of blocks) {
+      const text = String(block || "").trim();
+      if (!text) continue;
+      if (text.length <= MAX_BLOCK_CHARS) {
+        result.push(text);
+        continue;
+      }
+      const sentences = text.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [text];
+      let chunk = "";
+      for (const sentence of sentences) {
+        if ((chunk + sentence).length > MAX_BLOCK_CHARS && chunk) {
+          result.push(chunk.trim());
+          chunk = sentence;
+        } else {
+          chunk += sentence;
+        }
+      }
+      if (chunk.trim()) {
+        result.push(chunk.trim());
+      }
+    }
+    return result;
+  }
+
+  function collectLandingContentBlocks(site) {
+    const descEn = englishDescriptionForSite(site);
+    const justEn = (site?.justification_en || "").trim();
+    const blocks = [];
+    if (descEn) {
+      blocks.push(descEn);
+    }
+    if (justEn) {
+      blocks.push(...splitIntoSemanticBlocks(justEn));
+    }
+    return splitOversizedBlocks(blocks);
   }
 
   function splitIntoParagraphs(text) {
@@ -738,7 +784,7 @@
     return paragraphs.filter(p => p.length > 20);
   }
 
-  async function translateViaApi(text, targetLang, sourceLang = "en") {
+  async function translateViaApi(text, targetLang, sourceLang = "en", { retries = 1 } = {}) {
     const target = normalizeLanguageCode(targetLang);
     const source = normalizeLanguageCode(sourceLang);
 
@@ -746,22 +792,24 @@
       return text || "";
     }
 
-    try {
-      const response = await fetch(`${API_BASE}/api/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          source_language: source,
-          target_language: target,
-        }),
-      });
-      const data = await response.json();
-      if (response.ok && data?.translated_text?.trim()) {
-        return data.translated_text.trim();
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE}/api/translate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            source_language: source,
+            target_language: target,
+          }),
+        });
+        const data = await response.json();
+        if (response.ok && data?.translated_text?.trim()) {
+          return data.translated_text.trim();
+        }
+      } catch (_) {
+        /* retry */
       }
-    } catch (_) {
-      /* ignore */
     }
 
     return text;
@@ -776,28 +824,28 @@
       return trimmed;
     }
 
-    if (trimmed.length <= 4800) {
+    if (trimmed.length <= MAX_TRANSLATE_CHUNK) {
       return translateViaApi(trimmed, target, "en");
     }
 
     const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [trimmed];
-    const blocks = [];
+    const chunks = [];
     let chunk = "";
     for (const sentence of sentences) {
-      if ((chunk + sentence).length > 4000 && chunk) {
-        blocks.push(chunk.trim());
+      if ((chunk + sentence).length > MAX_TRANSLATE_CHUNK && chunk) {
+        chunks.push(chunk.trim());
         chunk = sentence;
       } else {
         chunk += sentence;
       }
     }
     if (chunk.trim()) {
-      blocks.push(chunk.trim());
+      chunks.push(chunk.trim());
     }
 
     const translated = [];
-    for (const block of blocks) {
-      translated.push(await translateViaApi(block, target, "en"));
+    for (const piece of chunks) {
+      translated.push(await translateViaApi(piece, target, "en"));
     }
     return translated.filter(Boolean).join(" ");
   }
@@ -808,43 +856,100 @@
     container.replaceChildren();
   }
 
-  function appendParagraphs(parent, className, text) {
-    splitIntoParagraphs(text).forEach(paragraph => {
+  function ensureDescriptionStatus(container) {
+    let status = container.querySelector(".landing-desc-status");
+    if (!status) {
+      status = document.createElement("p");
+      status.className = "landing-desc-status";
+      status.setAttribute("aria-live", "polite");
+      container.prepend(status);
+    }
+    return status;
+  }
+
+  function setDescriptionLoadingProgress(container, current, total) {
+    if (!container) return;
+    const status = ensureDescriptionStatus(container);
+    container.classList.add("landing-desc-loading");
+    if (!total || total <= 1) {
+      status.textContent = landingT("LOADING_UNESCO");
+      return;
+    }
+    status.textContent = landingT("LOADING_UNESCO_PROGRESS", {
+      current: String(current),
+      total: String(total),
+    });
+  }
+
+  function clearDescriptionStatus(container) {
+    container?.querySelector(".landing-desc-status")?.remove();
+    container?.classList.remove("landing-desc-loading");
+  }
+
+  function appendParagraphs(parent, className, text, { blockIndex = null } = {}) {
+    const paragraphs = splitIntoParagraphs(text);
+    paragraphs.forEach((paragraph, paragraphIndex) => {
       const p = document.createElement("p");
       p.className = className;
+      if (blockIndex !== null) {
+        p.dataset.blockIndex = String(blockIndex);
+        if (paragraphIndex === 0 && blockIndex > 0) {
+          p.classList.add("landing-desc-block-first");
+        }
+      }
       p.textContent = paragraph;
       parent.appendChild(p);
     });
+  }
+
+  function replaceBlockParagraphs(container, blockIndex, text, className) {
+    container
+      .querySelectorAll(`p[data-block-index="${blockIndex}"]`)
+      .forEach(node => node.remove());
+    appendParagraphs(container, className, text, { blockIndex });
   }
 
   async function renderLongDescription(site, targetLang) {
     const container = document.getElementById("landingDescription");
     if (!container) return;
 
-    const descEn = englishDescriptionForSite(site);
-    const justEn = (site?.justification_en || "").trim();
     const target = normalizeLanguageCode(targetLang);
+    const blocks = collectLandingContentBlocks(site);
 
     clearDescriptionContainer(container);
 
-    if (!descEn && !justEn) {
+    if (!blocks.length) {
       const fallback = getUnescoDescription(site, target) || landingT("NO_DESCRIPTION");
       appendParagraphs(container, "landing-desc-para", fallback);
       return;
     }
 
-    if (descEn) {
-      const introText = await translateBody(descEn, target);
-      appendParagraphs(container, "landing-desc-para", introText);
+    blocks.forEach((block, index) => {
+      appendParagraphs(container, "landing-desc-para", block, { blockIndex: index });
+    });
+
+    if (target === "en") {
+      clearDescriptionStatus(container);
+      return;
     }
 
-    if (!justEn) return;
-
-    const blocks = splitIntoSemanticBlocks(justEn);
-    for (const block of blocks) {
-      const translated = await translateBody(block, target);
-      appendParagraphs(container, "landing-desc-para", translated);
+    const total = blocks.length;
+    for (let index = 0; index < total; index += 1) {
+      setDescriptionLoadingProgress(container, index + 1, total);
+      try {
+        const translated = await translateBody(blocks[index], target);
+        replaceBlockParagraphs(
+          container,
+          index,
+          translated || blocks[index],
+          "landing-desc-para"
+        );
+      } catch (_) {
+        /* Behåll engelska stycken för detta avsnitt */
+      }
     }
+
+    clearDescriptionStatus(container);
   }
 
   function parseSiteId(site) {
@@ -923,22 +1028,21 @@
     const descContainer = document.getElementById("landingDescription");
     if (hasLongUnescoText(site)) {
       if (descContainer) {
-        descContainer.classList.add("landing-desc-loading");
-        descContainer.textContent = landingT("LOADING_UNESCO");
+        clearDescriptionContainer(descContainer);
+        setDescriptionLoadingProgress(descContainer, 0, 1);
       }
-      renderLongDescription(site, lang)
-        .catch(() => {
-          if (!descContainer) return;
+      renderLongDescription(site, lang).catch(() => {
+        if (!descContainer) return;
+        if (!descContainer.querySelector(".landing-desc-para")) {
           clearDescriptionContainer(descContainer);
           appendParagraphs(
             descContainer,
             "landing-desc-para",
             landingT("UNESCO_LOAD_ERROR")
           );
-        })
-        .finally(() => {
-          descContainer?.classList.remove("landing-desc-loading");
-        });
+        }
+        clearDescriptionStatus(descContainer);
+      });
     } else if (descContainer) {
       clearDescriptionContainer(descContainer);
       const localized = getUnescoDescription(site, lang) || site.description || "";
