@@ -450,6 +450,42 @@ const I18N_SV = {
   SUBSCRIPTION_UNTIL: "Prenumerationen gäller till",
 };
 
+/** Betalnings-toast per språk – direkt lookup (ingen strängmatchning). */
+const PAYMENT_COMPLETE_TOAST = {
+  sv: "Betalning genomförd. Prenumerationen är aktiv.",
+  en: "Payment completed. Your subscription is active.",
+  it: "Pagamento completato. L'abbonamento è attivo.",
+  fr: "Paiement effectué. L'abonnement est actif.",
+  de: "Zahlung abgeschlossen. Das Abonnement ist aktiv.",
+  es: "Pago completado. La suscripción está activa.",
+  ar: "تم الدفع. الاشتراك نشط الآن.",
+  ru: "Оплата выполнена. Подписка активна.",
+  zh: "付款完成。订阅已激活。",
+};
+
+let paymentToastLockUntil = 0;
+
+function getPaymentCompleteToast(lang) {
+  const target = normalizeLanguageCode(lang || getActiveReaderLang());
+  return PAYMENT_COMPLETE_TOAST[target] || PAYMENT_COMPLETE_TOAST.en || PAYMENT_COMPLETE_TOAST.sv;
+}
+
+function showPaymentCompleteToast(lang) {
+  const message = getPaymentCompleteToast(lang);
+  paymentToastLockUntil = Date.now() + 4500;
+  const toastEl = document.getElementById("toast");
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.add("show");
+  if (window.__paymentToastHideTimer) {
+    clearTimeout(window.__paymentToastHideTimer);
+  }
+  window.__paymentToastHideTimer = window.setTimeout(() => {
+    toastEl.classList.remove("show");
+    paymentToastLockUntil = 0;
+  }, 4200);
+}
+
 const RTL_LANGS = new Set(["ar", "he", "fa", "ur"]);
 const UNESCO_DESC_LANGS = new Set(["en", "fr", "es", "ru", "ar", "zh"]);
 
@@ -2466,6 +2502,9 @@ function resolveToastText(svText, lang = getActiveReaderLang()) {
 }
 
 function showReaderToast(svText, lang = getActiveReaderLang()) {
+  if (Date.now() < paymentToastLockUntil) {
+    return;
+  }
   const target = normalizeLanguageCode(lang);
   const immediate = resolveReaderText(svText, target);
   toast(immediate || svText);
@@ -3195,9 +3234,20 @@ async function reportLocationToApi() {
       return;
     }
     if (data.notified && data.nearest_site?.name) {
-      toast(`SMS skickat – du är nära ${data.nearest_site.name}.`);
+      if (Date.now() >= paymentToastLockUntil) {
+        const lang = getActiveReaderLang();
+        const name = data.nearest_site.name;
+        const nearTemplates = {
+          en: `SMS sent – you are near ${name}.`,
+          it: `SMS inviato – sei vicino a ${name}.`,
+          fr: `SMS envoyé – vous êtes près de ${name}.`,
+          de: `SMS gesendet – Sie sind in der Nähe von ${name}.`,
+          es: `SMS enviado – estás cerca de ${name}.`,
+        };
+        toast(nearTemplates[lang] || `SMS skickat – du är nära ${name}.`);
+      }
     } else if (data.reason === "sms_delivery_failed") {
-      toast(describeGeofencingSkipReason(data.reason));
+      showReaderToast(describeGeofencingSkipReason(data.reason));
     } else if (data.reason === "cooldown") {
       console.debug("Geofencing-SMS väntar på cooldown – försöker igen om 65 sekunder.");
       window.setTimeout(() => {
@@ -3208,7 +3258,7 @@ async function reportLocationToApi() {
     } else {
       const hint = describeGeofencingSkipReason(data.reason);
       if (hint) {
-        toast(hint);
+        showReaderToast(hint);
       } else if (data.reason) {
         console.debug("location/update:", data.reason);
       }
@@ -3678,7 +3728,7 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     );
   }
   await refreshServiceModalI18n(lang);
-  showReaderToast(I18N_SV.PAYMENT_COMPLETE, lang);
+  showPaymentCompleteToast(lang);
 
   startLocationReporting();
   window.setTimeout(() => {
@@ -4401,6 +4451,9 @@ function togglePolicy(event) {
 }
 
 function toast(message) {
+  if (Date.now() < paymentToastLockUntil) {
+    return;
+  }
   const toastEl = document.getElementById("toast");
   if (!toastEl) return;
 
@@ -4408,6 +4461,9 @@ function toast(message) {
   toastEl.classList.add("show");
 
   setTimeout(() => {
+    if (Date.now() < paymentToastLockUntil) {
+      return;
+    }
     toastEl.classList.remove("show");
   }, 2400);
 }
