@@ -1,6 +1,6 @@
 /**
  * Landningssida fran SMS-lank: /sites/{unesco_id}
- * Lang UNESCO-text (whc001) med fasta avsnittsrubriker – rubriker oversatts inte via API.
+ * Lang UNESCO-text som stycken – inga delrubriker, bara styckindelning.
  */
 (function () {
   const pathMatch = window.location.pathname.match(/\/sites\/([^/]+)/);
@@ -15,89 +15,6 @@
 
   const SECTION_HEADER =
     /^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*/i;
-
-  /** Läsarvänliga rubriker – inga engelska UNESCO-termer i svensk UI */
-  const READER_LABELS = {
-    sv: {
-      ouv: "Varför platsen är världsarv",
-      "brief synthesis": "Sammanfattning",
-      integrity: "Bevarandetillstånd",
-      authenticity: "Äkthet",
-      "protection and management requirements": "Skydd och förvaltning",
-    },
-    en: {
-      ouv: "Why this site is World Heritage",
-      "brief synthesis": "Summary",
-      integrity: "Integrity",
-      authenticity: "Authenticity",
-      "protection and management requirements": "Protection and management",
-    },
-    fi: {
-      ouv: "Miksi kohde on maailmanperintöä",
-      "brief synthesis": "Yhteenveto",
-      integrity: "Eheys",
-      authenticity: "Aitous",
-      "protection and management requirements": "Suojelu ja hoito",
-    },
-    de: {
-      ouv: "Warum die Stätte Welterbe ist",
-      "brief synthesis": "Zusammenfassung",
-      integrity: "Integrität",
-      authenticity: "Authentizität",
-      "protection and management requirements": "Schutz und Verwaltung",
-    },
-    fr: {
-      ouv: "Pourquoi ce site est classé",
-      "brief synthesis": "Synthèse",
-      integrity: "Intégrité",
-      authenticity: "Authenticité",
-      "protection and management requirements": "Protection et gestion",
-    },
-    es: {
-      ouv: "Por qué es patrimonio mundial",
-      "brief synthesis": "Síntesis",
-      integrity: "Integridad",
-      authenticity: "Autenticidad",
-      "protection and management requirements": "Protección y gestión",
-    },
-  };
-
-  function readerLabels(targetLang) {
-    const code = normalizeLanguageCode(targetLang);
-    return READER_LABELS[code] || READER_LABELS.en;
-  }
-
-  /** Vad UNESCO:s kriterium (i)–(vi) betyder för läsaren */
-  const CRITERION_EXPLAIN = {
-    sv: {
-      "(i)": "Platsen är ett konstnärligt eller vetenskapligt mästerverk.",
-      "(ii)": "Platsen visar ett viktigt utbyte mellan mänskliga värderingar eller har haft stort internationellt inflytande.",
-      "(iii)": "Platsen är ett unikt vittnesbörd om en kultur eller civilisation.",
-      "(iv)": "Platsen är ett enastående exempel på en viss typ av byggnad, landskap eller teknik.",
-      "(v)": "Platsen är ett traditionellt samhälle eller traditionellt bruk av land/hav.",
-      "(vi)": "Platsen har koppling till viktiga händelser eller levande traditioner.",
-    },
-    en: {
-      "(i)": "The site represents a masterpiece of human creativity.",
-      "(ii)": "The site shows important interchange of human values or major international influence.",
-      "(iii)": "The site bears unique testimony to a cultural tradition or civilization.",
-      "(iv)": "The site is an outstanding example of a type of building, landscape, or technology.",
-      "(v)": "The site is a traditional human settlement or land/sea use.",
-      "(vi)": "The site is associated with living traditions or significant events.",
-    },
-    fi: {
-      "(ii)": "Kohde kuvastaa merkittävää kansainvälistä vuorovaikutusta tai vaikutusta.",
-      "(iv)": "Kohde on erinomainen esimerkki tietystä paikka- tai rakennustyypistä.",
-    },
-  };
-
-  function criterionExplanation(rawTitle, targetLang) {
-    const roman = String(rawTitle || "").match(/\([ivx]+\)/i);
-    if (!roman) return "";
-    const code = normalizeLanguageCode(targetLang);
-    const hints = CRITERION_EXPLAIN[code] || CRITERION_EXPLAIN.en;
-    return hints[roman[0].toLowerCase()] || hints[roman[0]] || "";
-  }
 
   function toast(message) {
     const el = document.getElementById("toast");
@@ -137,84 +54,59 @@
     );
   }
 
-  function headingKey(rawTitle) {
-    return String(rawTitle || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
+  /** Ta bort UNESCO-rubriker ur löptext – stycken behålls, rubriker visas inte */
+  function stripUnescoHeaders(text) {
+    return String(text || "")
+      .replace(SECTION_HEADER, "")
+      .replace(
+        /\b(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*/gi,
+        " "
+      )
+      .replace(/\s{2,}/g, " ")
+      .trim();
   }
 
-  function localizeSectionHeading(rawTitle, targetLang) {
-    const code = normalizeLanguageCode(targetLang);
-    const labels = readerLabels(targetLang);
-    const key = headingKey(rawTitle);
-
-    if (key.startsWith("criterion")) {
-      const roman = rawTitle.match(/\([ivx]+\)/i);
-      if (!roman) {
-        return labels.criterion || "Kriterium";
-      }
-      const numeral = roman[0].replace(/[()]/g, "").toUpperCase();
-      const templates = {
-        sv: `UNESCO-kriterium ${numeral}`,
-        en: `UNESCO criterion ${numeral}`,
-        fi: `UNESCO-kriteeri ${numeral}`,
-        de: `UNESCO-Kriterium ${numeral}`,
-        fr: `Critère UNESCO ${numeral}`,
-        es: `Criterio UNESCO ${numeral}`,
-      };
-      return templates[code] || templates.en;
-    }
-
-    return labels[key] || rawTitle.trim();
-  }
-
-  function splitJustificationSections(text) {
+  /** Delar i stycken vid UNESCO-avsnitt (semantiskt) utan att visa rubriker */
+  function splitIntoSemanticBlocks(text) {
     const raw = String(text || "").trim();
     if (!raw) return [];
 
-    const parts = SECTION_SPLIT.test(raw) ? raw.split(SECTION_SPLIT) : [raw];
+    if (!SECTION_SPLIT.test(raw)) {
+      SECTION_SPLIT.lastIndex = 0;
+      return [raw];
+    }
     SECTION_SPLIT.lastIndex = 0;
 
-    return parts
-      .map(part => part.trim())
-      .filter(part => part.length > 40)
-      .map(part => {
-        const match = part.match(SECTION_HEADER);
-        if (!match) {
-          return { titleKey: "", titleRaw: "", body: part };
-        }
-        return {
-          titleKey: headingKey(match[1]),
-          titleRaw: match[1],
-          body: part.slice(match[0].length).trim() || part,
-        };
-      });
+    return raw
+      .split(SECTION_SPLIT)
+      .map(part => stripUnescoHeaders(part))
+      .filter(part => part.length > 40);
   }
 
   function splitIntoParagraphs(text) {
     const trimmed = String(text || "").trim();
     if (!trimmed) return [];
-    if (trimmed.includes("\n\n")) {
-      return trimmed
-        .split(/\n\s*\n+/)
-        .map(p => p.trim())
-        .filter(p => p.length > 0);
-    }
+
     const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
-    if (!sentences || sentences.length <= 4) {
+    if (!sentences || sentences.length <= 3) {
       return [trimmed];
     }
+
     const paragraphs = [];
     let bucket = "";
     sentences.forEach((sentence, index) => {
-      bucket += sentence.trim() + " ";
-      if ((index + 1) % 3 === 0 || index === sentences.length - 1) {
-        paragraphs.push(bucket.trim());
+      const piece = sentence.trim();
+      if (!piece) return;
+      bucket = bucket ? `${bucket} ${piece}` : piece;
+      if ((index + 1) % 4 === 0 || index === sentences.length - 1) {
+        paragraphs.push(bucket);
         bucket = "";
       }
     });
-    return paragraphs.filter(Boolean);
+    if (bucket) {
+      paragraphs.push(bucket);
+    }
+    return paragraphs.filter(p => p.length > 20);
   }
 
   async function translateViaApi(text, targetLang, sourceLang = "en") {
@@ -247,15 +139,18 @@
   }
 
   async function translateBody(text, targetLang) {
-    const trimmed = String(text || "").trim();
+    const trimmed = stripUnescoHeaders(text);
     if (!trimmed) return "";
+
     const target = normalizeLanguageCode(targetLang);
     if (target === "en") {
       return trimmed;
     }
+
     if (trimmed.length <= 4800) {
       return translateViaApi(trimmed, target, "en");
     }
+
     const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [trimmed];
     const blocks = [];
     let chunk = "";
@@ -270,6 +165,7 @@
     if (chunk.trim()) {
       blocks.push(chunk.trim());
     }
+
     const translated = [];
     for (const block of blocks) {
       translated.push(await translateViaApi(block, target, "en"));
@@ -292,35 +188,6 @@
     });
   }
 
-  function appendJustificationSections(container, sections, targetLang) {
-    const labels = readerLabels(targetLang);
-    const section = document.createElement("section");
-    section.className = "landing-desc-section";
-    const h3 = document.createElement("h3");
-    h3.textContent = labels.ouv;
-    section.appendChild(h3);
-
-    sections.forEach(item => {
-      const article = document.createElement("article");
-      article.className = "landing-desc-chunk";
-      if (item.heading) {
-        const h4 = document.createElement("h4");
-        h4.textContent = item.heading;
-        article.appendChild(h4);
-      }
-      if (item.criterionHint) {
-        const hint = document.createElement("p");
-        hint.className = "landing-criterion-hint";
-        hint.textContent = item.criterionHint;
-        article.appendChild(hint);
-      }
-      appendParagraphs(article, "landing-desc-para", item.body);
-      section.appendChild(article);
-    });
-
-    container.appendChild(section);
-  }
-
   async function renderLongDescription(site, targetLang) {
     const container = document.getElementById("landingDescription");
     if (!container) return;
@@ -333,33 +200,22 @@
 
     if (!descEn && !justEn) {
       const fallback = getUnescoDescription(site, target) || "Ingen beskrivning tillgänglig.";
-      appendParagraphs(container, "landing-desc-intro", fallback);
+      appendParagraphs(container, "landing-desc-para", fallback);
       return;
     }
 
     if (descEn) {
       const introText = await translateBody(descEn, target);
-      appendParagraphs(container, "landing-desc-intro", introText);
+      appendParagraphs(container, "landing-desc-para", introText);
     }
 
     if (!justEn) return;
 
-    const parsed = splitJustificationSections(justEn);
-    const rendered = [];
-    for (const part of parsed) {
-      const body = await translateBody(part.body, target);
-      rendered.push({
-        heading: part.titleRaw
-          ? localizeSectionHeading(part.titleRaw, target)
-          : "",
-        criterionHint: part.titleRaw
-          ? criterionExplanation(part.titleRaw, target)
-          : "",
-        body,
-      });
+    const blocks = splitIntoSemanticBlocks(justEn);
+    for (const block of blocks) {
+      const translated = await translateBody(block, target);
+      appendParagraphs(container, "landing-desc-para", translated);
     }
-
-    appendJustificationSections(container, rendered, target);
   }
 
   function parseSiteId(site) {
@@ -443,7 +299,7 @@
       const localized = getUnescoDescription(site, lang) || site.description || "";
       appendParagraphs(
         descContainer,
-        "landing-desc-intro",
+        "landing-desc-para",
         localized || "Ingen beskrivning tillgänglig."
       );
     }
