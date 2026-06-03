@@ -7,6 +7,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from app.services.unesco_service import fetch_unesco_brief_synthesis
+
 DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "heritage-sites.json"
 
 
@@ -30,6 +32,22 @@ def get_heritage_sites() -> tuple[dict[str, Any], ...]:
     return tuple(data)
 
 
+def _with_long_unesco_description(site: dict[str, Any]) -> dict[str, Any]:
+    uid = str(site.get("unesco_id") or site.get("id") or "").strip()
+    if not uid:
+        return dict(site)
+
+    current = (site.get("desc_en") or site.get("description") or "").strip()
+    long_desc = fetch_unesco_brief_synthesis(uid)
+    if not long_desc or len(long_desc) <= len(current):
+        return dict(site)
+
+    enriched = dict(site)
+    enriched["desc_en"] = long_desc
+    enriched["description"] = long_desc
+    return enriched
+
+
 def find_site_by_ref(site_ref: str) -> Optional[dict[str, Any]]:
     ref = str(site_ref or "").strip()
     if not ref:
@@ -37,7 +55,7 @@ def find_site_by_ref(site_ref: str) -> Optional[dict[str, Any]]:
     for site in get_heritage_sites():
         uid = str(site.get("unesco_id") or site.get("id") or "")
         if uid == ref or str(site.get("name", "")).lower() == ref.lower():
-            return site
+            return _with_long_unesco_description(site)
     return None
 
 

@@ -164,16 +164,20 @@ def _filter_sentences_for_language(sentences: list[str], language: str) -> list[
 
 def _pick_site_description(site: dict, language: str) -> tuple[str, str]:
     lang = _normalize_language(language)
-    if lang == "sv":
-        for key in ("desc_sv", "desc_en", "description"):
-            text = (site.get(key) or "").strip()
-            if text:
-                return text, key
-        return "", ""
-    for key in (f"desc_{lang}", "desc_en", "description", "desc_sv"):
-        text = (site.get(key) or "").strip()
-        if text:
-            return text, key
+    localized_key = f"desc_{lang}"
+    localized = (site.get(localized_key) or "").strip()
+    desc_en = (site.get("desc_en") or site.get("description") or "").strip()
+
+    if localized and desc_en and len(localized) < len(desc_en) * 0.6:
+        return desc_en, "desc_en"
+    if localized:
+        return localized, localized_key
+    if desc_en:
+        return desc_en, "desc_en"
+    if lang != "sv":
+        desc_sv = (site.get("desc_sv") or "").strip()
+        if desc_sv:
+            return desc_sv, "desc_sv"
     return "", ""
 
 

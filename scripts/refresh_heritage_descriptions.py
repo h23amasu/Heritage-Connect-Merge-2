@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.services.unesco_service import _extract_whc_description, fetch_unesco_remote
+from app.services.unesco_service import enrich_sites_with_long_descriptions
 
 HERITAGE_FILE = ROOT / "data" / "heritage-sites.json"
 
@@ -28,22 +28,10 @@ def main() -> None:
     with HERITAGE_FILE.open(encoding="utf-8") as f:
         sites = json.load(f)
 
-    remote = fetch_unesco_remote()
-    by_id = {
-        str(s.get("unesco_id") or ""): s
-        for s in remote
-        if s.get("unesco_id")
-    }
-
+    enriched_sites = enrich_sites_with_long_descriptions(sites)
     updated = 0
-    for site in sites:
-        uid = str(site.get("unesco_id") or "")
-        whc = by_id.get(uid)
-        if not whc:
-            continue
-        new_desc = (whc.get("desc_en") or whc.get("description") or "").strip()
-        if not new_desc:
-            continue
+    for site, enriched in zip(sites, enriched_sites):
+        new_desc = (enriched.get("desc_en") or enriched.get("description") or "").strip()
         old = (site.get("desc_en") or site.get("description") or "").strip()
         if len(new_desc) > len(old):
             site["desc_en"] = new_desc
