@@ -168,6 +168,10 @@ def serve_config():
 if (_PROJECT_ROOT / "css").is_dir():
     app.mount("/css", StaticFiles(directory=_PROJECT_ROOT / "css"), name="css")
 if (_PROJECT_ROOT / "js").is_dir():
-    app.mount("/js", StaticFiles(directory=_PROJECT_ROOT / "js"), name="js")
+    app.mount(
+        "/js",
+        StaticFiles(directory=_PROJECT_ROOT / "js", headers={"Cache-Control": "no-cache"}),
+        name="js",
+    )
 if (_PROJECT_ROOT / "data").is_dir():
     app.mount("/data", StaticFiles(directory=_PROJECT_ROOT / "data"), name="data")
