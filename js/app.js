@@ -22,6 +22,10 @@ function getActiveReaderLang() {
   if (preferredReaderLang) {
     return normalizeLanguageCode(preferredReaderLang);
   }
+  const select = document.getElementById("demoLanguageSelect");
+  if (select?.value) {
+    return normalizeLanguageCode(select.value);
+  }
   return getNewspaperLang();
 }
 
@@ -292,9 +296,88 @@ const UI_MODAL_I18N = {
   }
 };
 
+/** Toast – offline för UNESCO-språk (ingen API-väntan vid betalning). */
+const TOAST_I18N_ENTRIES = {
+  en: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Payment completed. Your subscription is active.",
+    "Inloggning genomförd via e-post.": "Signed in via email.",
+    "Stripe laddas – försök igen om ett ögonblick.": "Stripe is loading – try again in a moment.",
+    "Betalningen kunde inte bekräftas.": "Payment could not be confirmed.",
+    "Ange ett giltigt kortnummer (test).": "Enter a valid card number (test).",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Enter an email for confirmation and OwnTracks instructions.",
+    "Kontaktuppgifter sparade.": "Contact details saved.",
+  },
+  it: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Pagamento completato. L'abbonamento è attivo.",
+    "Inloggning genomförd via e-post.": "Accesso effettuato via e-mail.",
+    "Stripe laddas – försök igen om ett ögonblick.": "Stripe si sta caricando – riprova tra un momento.",
+    "Betalningen kunde inte bekräftas.": "Impossibile confermare il pagamento.",
+    "Ange ett giltigt kortnummer (test).": "Inserisci un numero di carta valido (test).",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Inserisci un'e-mail per la conferma e le istruzioni OwnTracks.",
+    "Kontaktuppgifter sparade.": "Dati di contatto salvati.",
+  },
+  fr: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Paiement effectué. L'abonnement est actif.",
+    "Inloggning genomförd via e-post.": "Connexion par e-mail réussie.",
+    "Stripe laddas – försök igen om ett ögonblick.": "Stripe se charge – réessayez dans un instant.",
+    "Betalningen kunde inte bekräftas.": "Le paiement n'a pas pu être confirmé.",
+    "Ange ett giltigt kortnummer (test).": "Saisissez un numéro de carte valide (test).",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Saisissez un e-mail pour la confirmation et les instructions OwnTracks.",
+    "Kontaktuppgifter sparade.": "Coordonnées enregistrées.",
+  },
+  de: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Zahlung abgeschlossen. Das Abonnement ist aktiv.",
+    "Inloggning genomförd via e-post.": "Anmeldung per E-Mail erfolgreich.",
+    "Stripe laddas – försök igen om ett ögonblick.": "Stripe wird geladen – versuchen Sie es gleich erneut.",
+    "Betalningen kunde inte bekräftas.": "Die Zahlung konnte nicht bestätigt werden.",
+    "Ange ett giltigt kortnummer (test).": "Geben Sie eine gültige Kartennummer ein (Test).",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Geben Sie eine E-Mail für Bestätigung und OwnTracks-Anleitung ein.",
+    "Kontaktuppgifter sparade.": "Kontaktdaten gespeichert.",
+  },
+  es: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Pago completado. La suscripción está activa.",
+    "Inloggning genomförd via e-post.": "Inicio de sesión por correo electrónico.",
+    "Stripe laddas – försök igen om ett ögonblick.": "Stripe se está cargando – inténtelo de nuevo en un momento.",
+    "Betalningen kunde inte bekräftas.": "No se pudo confirmar el pago.",
+    "Ange ett giltigt kortnummer (test).": "Introduzca un número de tarjeta válido (prueba).",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Introduzca un correo para la confirmación e instrucciones de OwnTracks.",
+    "Kontaktuppgifter sparade.": "Datos de contacto guardados.",
+  },
+  ar: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "تم الدفع. الاشتراك نشط الآن.",
+    "Inloggning genomförd via e-post.": "تم تسجيل الدخول عبر البريد الإلكتروني.",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "أدخل بريدًا إلكترونيًا للتأكيد وتعليمات OwnTracks.",
+    "Kontaktuppgifter sparade.": "تم حفظ بيانات الاتصال.",
+  },
+  ru: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "Оплата выполнена. Подписка активна.",
+    "Inloggning genomförd via e-post.": "Вход по электронной почте выполнен.",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "Укажите e-mail для подтверждения и инструкций OwnTracks.",
+    "Kontaktuppgifter sparade.": "Контактные данные сохранены.",
+  },
+  zh: {
+    "Betalning genomförd. Prenumerationen är aktiv.": "付款完成。订阅已激活。",
+    "Inloggning genomförd via e-post.": "已通过电子邮件登录。",
+    "Ange e-post för bekräftelse och OwnTracks-instruktioner.":
+      "请输入用于确认和 OwnTracks 说明的电子邮件。",
+    "Kontaktuppgifter sparade.": "联系方式已保存。",
+  },
+};
+
 function getI18nDictionary(lang) {
   const target = (lang || "sv").toLowerCase().slice(0, 2);
-  return { ...(NEWSPAPER_I18N[target] || {}), ...(UI_MODAL_I18N[target] || {}) };
+  return {
+    ...(NEWSPAPER_I18N[target] || {}),
+    ...(UI_MODAL_I18N[target] || {}),
+    ...(TOAST_I18N_ENTRIES[target] || {}),
+  };
 }
 
 const I18N_SV = {
@@ -2317,7 +2400,24 @@ async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
 }
 
 async function localizedToast(svText, lang = getActiveReaderLang()) {
-  toast(await translateUiText(svText, lang, "sv"));
+  const target = normalizeLanguageCode(lang);
+  if (target === "sv") {
+    toast(svText);
+    return;
+  }
+
+  const offline = resolveI18nText(svText, target, "sv");
+  if (offline) {
+    toast(offline);
+    return;
+  }
+
+  let translated = await translateUiText(svText, target, "sv");
+  if (!translated || translated === svText) {
+    translated =
+      (await translateViaMyMemory(svText, target, "sv")) || translated || svText;
+  }
+  toast(translated);
 }
 
 async function translateViaMyMemoryChunk(text, targetLang, sourceLang = "sv") {
@@ -2622,6 +2722,16 @@ async function applyReaderLanguage(lang) {
 
     if (isActiveReaderLanguageTarget(target)) {
       await updateModalProgressTitle(target);
+      if (target !== "sv") {
+        const toastSources = Object.values(I18N_SV).filter(
+          value => typeof value === "string" && value.trim().length > 2
+        );
+        try {
+          await translateBatchMap(toastSources, target, "sv");
+        } catch (_) {
+          /* toast visas ändå via offline-ordbok eller MyMemory */
+        }
+      }
     }
   } catch (error) {
     console.error("Språkbyte misslyckades:", error);
