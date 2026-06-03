@@ -1744,14 +1744,24 @@ async function fetchClosestSiteFromApi(lat, lng, lang) {
   ];
 
   for (const url of urls) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
     try {
-      const response = await fetch(url, { headers: apiRequestHeaders() });
-      if (!response.ok) continue;
+      const response = await fetch(url, {
+        headers: apiRequestHeaders(),
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        window.clearTimeout(timeoutId);
+        continue;
+      }
+      window.clearTimeout(timeoutId);
       const data = await response.json();
       if (data?.name || data?.description) {
         return { ...data, server_localized: true };
       }
     } catch (error) {
+      window.clearTimeout(timeoutId);
       console.warn("Närmaste plats via API misslyckades:", url, error);
     }
   }

@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from app.core.config import settings
 from app.services.unesco_service import fetch_unesco_brief_synthesis
 
 DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "heritage-sites.json"
@@ -55,6 +56,8 @@ def find_site_by_ref(site_ref: str) -> Optional[dict[str, Any]]:
     for site in get_heritage_sites():
         uid = str(site.get("unesco_id") or site.get("id") or "")
         if uid == ref or str(site.get("name", "")).lower() == ref.lower():
+            if settings.GEOFENCING_DEMO_MODE:
+                return dict(site)
             return _with_long_unesco_description(site)
     return None
 

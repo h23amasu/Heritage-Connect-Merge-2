@@ -2,6 +2,7 @@
 Router: World Heritage Sites
 Handles every endpoint related to heritage sites.
 """
+from functools import lru_cache
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -20,17 +21,23 @@ from app.services.unesco_service import get_cached_sites
 router = APIRouter(prefix="/api/sites", tags=["Sites"])
 
 
-def _translate_field(text: str, source_lang: str, target_lang: str) -> str:
+@lru_cache(maxsize=512)
+def _cached_translate_field(text: str, source_lang: str, target_lang: str) -> str:
+    """Cachad översättning – undviker upprepade Google-anrop som kan hänga Railway."""
     if not text or source_lang == target_lang:
         return text or ""
-    translated = translate_text(text, source_lang, target_lang)
-    if translated and translated.strip() and translated.strip() != text.strip():
+    snippet = text[:1500]
+    try:
+        translated = translate_text(snippet, source_lang, target_lang)
+    except Exception:
+        return text
+    if translated and translated.strip() and translated.strip() != snippet.strip():
         return translated.strip()
     return text
 
 
 def _localized_site_fields(site: dict, lang: str = "sv") -> tuple[str, str, str]:
-    """Namn, beskrivning och land på läsarens språk (UNESCO-fält + översättning)."""
+    """Namn, beskrivning och land på läsarens språk (UNESCO-fält + en översättning vid behov)."""
     lang = (lang or "sv").lower()[:2]
     name = (site.get("name") or "").strip()
     country = (site.get("country") or "").strip()
@@ -44,17 +51,11 @@ def _localized_site_fields(site: dict, lang: str = "sv") -> tuple[str, str, str]
     if localized_name:
         name = localized_name
 
-    if description and desc_en and description.strip() != desc_en.strip():
-        pass
-    elif desc_en:
-        description = _translate_field(desc_en, "en", lang)
+    # Endast fakta översätts på servern (snabbare, mindre risk för timeout).
+    if desc_en and (not description or description.strip() == desc_en.strip()):
+        description = _cached_translate_field(desc_en, "en", lang)
 
-    if name and not localized_name:
-        name = _translate_field(name, "en", lang) or name
-    if country:
-        country = _translate_field(country, "en", lang) or country
-
-    return name, description, country
+    return name, description or desc_en, country
 
 
 def _demo_closest(lat: float, lng: float, lang: str = "sv") -> dict:
