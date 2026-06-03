@@ -454,7 +454,7 @@ const I18N_SV = {
   SUBSCRIPTION_UNTIL: "Prenumerationen gäller till",
 };
 
-/** Betalnings-toast per språk – direkt lookup (ingen strängmatchning). */
+/** Toast per språk – direkt lookup (ingen API-väntan). */
 const PAYMENT_COMPLETE_TOAST = {
   sv: "Betalning genomförd. Prenumerationen är aktiv.",
   en: "Payment completed. Your subscription is active.",
@@ -466,6 +466,69 @@ const PAYMENT_COMPLETE_TOAST = {
   ru: "Оплата выполнена. Подписка активна.",
   zh: "付款完成。订阅已激活。",
 };
+
+const SUBSCRIPTION_PREPARED_TOAST = {
+  sv: "Prenumerationen är förberedd.",
+  en: "Subscription ready — continue to payment.",
+  es: "Suscripción preparada — continúe al pago.",
+  it: "Abbonamento pronto — prosegui al pagamento.",
+  fr: "Abonnement prêt — passez au paiement.",
+  de: "Abonnement bereit — weiter zur Zahlung.",
+  ar: "الاشتراك جاهز — تابع إلى الدفع.",
+  ru: "Подписка готова — перейдите к оплате.",
+  zh: "订阅已准备好 — 请继续付款。",
+};
+
+const TERMS_REQUIRED_TOAST = {
+  sv: "Du måste godkänna villkoren och integritetspolicyn.",
+  en: "You must accept the terms and privacy policy.",
+  es: "Debe aceptar los términos y la política de privacidad.",
+  it: "Devi accettare i termini e l'informativa sulla privacy.",
+  fr: "Vous devez accepter les conditions et la politique de confidentialité.",
+  de: "Sie müssen die AGB und Datenschutzerklärung akzeptieren.",
+};
+
+const EMAIL_INVALID_TOAST = {
+  sv: "Ange en giltig e-postadress.",
+  en: "Enter a valid email address.",
+  es: "Introduzca una dirección de correo válida.",
+  it: "Inserisci un indirizzo e-mail valido.",
+  fr: "Saisissez une adresse e-mail valide.",
+  de: "Geben Sie eine gültige E-Mail-Adresse ein.",
+};
+
+const PHONE_INVALID_TOAST = {
+  sv: "Ange ett giltigt mobilnummer.",
+  en: "Enter a valid mobile number.",
+  es: "Introduzca un número de móvil válido.",
+  it: "Inserisci un numero di cellulare valido.",
+  fr: "Saisissez un numéro de mobile valide.",
+  de: "Geben Sie eine gültige Mobilnummer ein.",
+};
+
+function getReaderToastFromMap(messageMap, lang) {
+  const target = getCheckoutLangForPayment(lang);
+  return messageMap[target] || messageMap.en || messageMap.sv;
+}
+
+function showReaderToastMap(messageMap, lang) {
+  const toastEl = document.getElementById("toast");
+  if (!toastEl) return;
+  if (Date.now() < paymentToastLockUntil && lockedPaymentToastMessage) {
+    toastEl.textContent = lockedPaymentToastMessage;
+    toastEl.classList.add("show");
+    return;
+  }
+  toastEl.textContent = getReaderToastFromMap(messageMap, lang);
+  toastEl.classList.add("show");
+  if (window.__flowToastHideTimer) {
+    clearTimeout(window.__flowToastHideTimer);
+  }
+  window.__flowToastHideTimer = window.setTimeout(() => {
+    if (Date.now() < paymentToastLockUntil) return;
+    toastEl.classList.remove("show");
+  }, 3200);
+}
 
 let paymentToastLockUntil = 0;
 let lockedPaymentToastMessage = null;
@@ -3474,8 +3537,10 @@ function logApiPayload(label, endpoint, payload) {
 }
 
 function createSubscriptionDraft() {
+  const lang = getCheckoutLangForPayment();
+
   if (!isTermsAccepted()) {
-    toast("Du måste godkänna villkoren och integritetspolicyn.");
+    showReaderToastMap(TERMS_REQUIRED_TOAST, lang);
     return;
   }
 
@@ -3486,26 +3551,29 @@ function createSubscriptionDraft() {
 
   if (prototypeState.channel === "email") {
     if (!contactValue || !contactValue.includes("@") || isPlaceholderContact(contactValue)) {
-      toast("Ange en giltig e-postadress.");
+      showReaderToastMap(EMAIL_INVALID_TOAST, lang);
       return;
     }
     prototypeState.email = contactValue;
     prototypeState.phone = "";
   } else {
     if (!contactValue || isPlaceholderContact(contactValue)) {
-      toast("Ange ett giltigt mobilnummer.");
+      showReaderToastMap(PHONE_INVALID_TOAST, lang);
       return;
     }
     prototypeState.phone = normalizePhoneForApi(contactValue);
     prototypeState.email = "";
   }
 
+  prototypeState.checkoutLang = lang;
+  currentSite.language = lang;
+
   const payload = {
     channel: prototypeState.channel,
     to: contactValue,
     site_id: currentSite.site_id,
     site_name: currentSite.name,
-    language: currentSite.language,
+    language: lang,
     subscription_type: "world_heritage_nearby"
   };
 
@@ -3516,8 +3584,8 @@ function createSubscriptionDraft() {
   );
 
   openModalStep("payment");
-  updatePaymentProviderUi();
-  toast("Prenumerationen är förberedd.");
+  void updatePaymentProviderUi().then(() => prepareStripePaymentStep(lang));
+  showReaderToastMap(SUBSCRIPTION_PREPARED_TOAST, lang);
 }
 
 async function sendSmsCode() {
@@ -3861,7 +3929,7 @@ async function completeSubscriptionAfterPayment(paymentFields) {
 
 async function paymentComplete() {
   if (!isTermsAccepted()) {
-    toast("Du måste godkänna villkoren och integritetspolicyn.");
+    showReaderToastMap(TERMS_REQUIRED_TOAST, getCheckoutLangForPayment());
     openModalStep("subscribe");
     return;
   }
