@@ -465,9 +465,34 @@ const PAYMENT_COMPLETE_TOAST = {
 
 let paymentToastLockUntil = 0;
 
+function resolveCheckoutLang() {
+  if (prototypeState.checkoutLang && isValidLanguageCode(prototypeState.checkoutLang)) {
+    return normalizeLanguageCode(prototypeState.checkoutLang);
+  }
+  return getActiveReaderLang();
+}
+
 function getPaymentCompleteToast(lang) {
-  const target = normalizeLanguageCode(lang || getActiveReaderLang());
+  const target = normalizeLanguageCode(lang || resolveCheckoutLang());
   return PAYMENT_COMPLETE_TOAST[target] || PAYMENT_COMPLETE_TOAST.en || PAYMENT_COMPLETE_TOAST.sv;
+}
+
+async function ensureCheckoutLanguageReady() {
+  if (readerLanguageApplyPromise) {
+    try {
+      await readerLanguageApplyPromise;
+    } catch (_) {
+      /* fortsätt – toast har offline-texter */
+    }
+  }
+  const target = getActiveReaderLang();
+  if (target === "sv") return target;
+
+  const waitStarted = Date.now();
+  while (document.body.classList.contains("is-translating") && Date.now() - waitStarted < 45000) {
+    await new Promise(resolve => window.setTimeout(resolve, 120));
+  }
+  return getActiveReaderLang();
 }
 
 function showPaymentCompleteToast(lang) {
@@ -2255,7 +2280,11 @@ const prototypeState = {
   visited_sites: [],
   last_subscription: null,
   duration_days: 30,
+  /** Språk låst vid klick på Betala – används för toast efter Stripe (kan ta flera sek). */
+  checkoutLang: null,
 };
+
+let readerLanguageApplyPromise = null;
 
 function resetDemoState() {
   stopLocationReporting();
@@ -2681,9 +2710,21 @@ async function changeDemoLanguage(lang) {
   }
   syncDemoLanguageSelectToLang(target);
   document.documentElement.lang = target;
-  await applyReaderLanguage(target);
+  prototypeState.checkoutLang = target;
+  const applyTask = applyReaderLanguage(target);
+  readerLanguageApplyPromise = applyTask;
+  try {
+    await applyTask;
+  } finally {
+    if (readerLanguageApplyPromise === applyTask) {
+      readerLanguageApplyPromise = null;
+    }
+  }
   if (getActiveReaderLang() !== target) return;
   await refreshGeoUiSafeguard();
+  if (document.getElementById("serviceModal")?.getAttribute("aria-hidden") === "false") {
+    await refreshServiceModalI18n(target);
+  }
 }
 
 function readStoredReaderLang() {
@@ -2823,20 +2864,23 @@ async function applyReaderLanguage(lang) {
   const seq = ++applyReaderLanguageSeq;
   currentSite.language = target;
   document.documentElement.lang = target;
+  prototypeState.checkoutLang = target;
   captureI18nSources();
   syncReaderLanguageUi(target);
   document.documentElement.dir = RTL_LANGS.has(target) ? "rtl" : "ltr";
   setTranslationLoading(true);
 
   try {
-    await applyDynamicLanguageContent(target);
-    if (!isActiveReaderLanguageTarget(target)) return;
-
     const elements = Array.from(document.querySelectorAll("[data-i18n]"))
       .filter(el => el.dataset.i18nDynamic !== "true");
 
     const uniqueSources = [...new Set(elements.map(el => getI18nSource(el)).filter(Boolean))];
     const { map: translatedMap, pending } = buildTranslationMapSync(uniqueSources, target, "sv");
+    applyTranslationMapToElements(elements, translatedMap);
+
+    await applyDynamicLanguageContent(target);
+    if (!isActiveReaderLanguageTarget(target)) return;
+
     applyTranslationMapToElements(elements, translatedMap);
 
     const placeholderEls = document.querySelectorAll("[data-i18n-placeholder]");
@@ -3271,7 +3315,12 @@ async function reportLocationToApi() {
 function startLocationReporting() {
   stopLocationReporting();
   if (!getLocationReportPhone() || !prototypeState.subscription_active) return;
-  reportLocationToApi();
+  const delay = Math.max(5000, paymentToastLockUntil - Date.now() + 800);
+  window.setTimeout(() => {
+    if (prototypeState.subscription_active) {
+      void reportLocationToApi();
+    }
+  }, delay);
   locationReportTimer = window.setInterval(reportLocationToApi, 120000);
 }
 
@@ -3711,7 +3760,10 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     prototypeState.phone = normalizePhoneForApi(data.user_id);
   }
   prototypeState.last_subscription = data;
-  const lang = getActiveReaderLang();
+  const lang = normalizeLanguageCode(
+    paymentFields.checkout_lang || prototypeState.checkoutLang || getActiveReaderLang()
+  );
+  prototypeState.checkoutLang = lang;
   document.documentElement.lang = lang;
   updateConfirmationMessage({
     receipt_sent: data.receipt_sent,
@@ -3731,11 +3783,6 @@ async function completeSubscriptionAfterPayment(paymentFields) {
   showPaymentCompleteToast(lang);
 
   startLocationReporting();
-  window.setTimeout(() => {
-    if (prototypeState.subscription_active) {
-      void reportLocationToApi();
-    }
-  }, 2500);
   return true;
 }
 
@@ -3805,6 +3852,7 @@ async function paymentComplete() {
         amount: SUBSCRIPTION_PRICE_SEK,
         payment_intent_id: paymentIntent.id,
         email: receiptEmail || undefined,
+        checkout_lang: lang,
       });
       return;
     }
@@ -3827,6 +3875,7 @@ async function paymentComplete() {
       card_type: cardType,
       card_number: cardNumber,
       email: receiptEmail || undefined,
+      checkout_lang: lang,
     });
   } catch (error) {
     console.warn("Prenumeration/betalning misslyckades:", error);
