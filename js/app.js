@@ -2286,6 +2286,12 @@ async function setElementI18n(element, svText, lang = getActiveReaderLang()) {
   element.textContent = lang === "sv" ? svText : await translateUiText(svText, lang, "sv");
 }
 
+async function localizedToast(svText, lang = getActiveReaderLang()) {
+  toast(await translateUiText(svText, lang, "sv"));
+}
+
+let suppressedToastMessage = null;
+
 async function translateViaMyMemoryChunk(text, targetLang, sourceLang = "sv") {
   const target = (targetLang || "sv").toLowerCase().slice(0, 2);
   const source = (sourceLang || "sv").toLowerCase().slice(0, 2);
@@ -3294,6 +3300,8 @@ async function loginWithEmailCode() {
     syncSettingsChannelButtons();
     openModalStep("confirmation");
     startLocationReporting();
+    await localizedToast("Inloggning genomförd via e-post.");
+    suppressedToastMessage = "Inloggning genomförd via e-post.";
     toast("Inloggning genomförd via e-post.");
   } catch (error) {
     console.warn("verify-email-code misslyckades:", error);
@@ -3404,6 +3412,8 @@ async function completeSubscriptionAfterPayment(paymentFields) {
     prototypeState.phone = normalizePhoneForApi(data.user_id);
   }
   prototypeState.last_subscription = data;
+  await localizedToast("Betalning genomfÃ¶rd. Prenumerationen Ã¤r aktiv.");
+  suppressedToastMessage = "Betalning genomfÃ¶rd. Prenumerationen Ã¤r aktiv.";
 
   updateConfirmationMessage({
     receipt_sent: data.receipt_sent,
@@ -3431,6 +3441,8 @@ async function paymentComplete() {
 
   const receiptEmail = resolveConfirmationEmail();
   if (!receiptEmail || !receiptEmail.includes("@")) {
+    await localizedToast(I18N_SV.PAYMENT_EMAIL_REQUIRED);
+    suppressedToastMessage = I18N_SV.PAYMENT_EMAIL_REQUIRED;
     toast(I18N_SV.PAYMENT_EMAIL_REQUIRED);
     return;
   }
@@ -3445,6 +3457,8 @@ async function paymentComplete() {
   try {
     if (PAYMENT_CONFIG.stripe_enabled) {
       if (!stripeClient || !stripeElements || !stripeClientSecret) {
+        await localizedToast("Stripe laddas â€“ fÃ¶rsÃ¶k igen om ett Ã¶gonblick.");
+        suppressedToastMessage = "Stripe laddas â€“ fÃ¶rsÃ¶k igen om ett Ã¶gonblick.";
         toast("Stripe laddas – försök igen om ett ögonblick.");
         await prepareStripePaymentStep();
         return;
@@ -3476,6 +3490,8 @@ async function paymentComplete() {
 
       const paymentIntent = result.paymentIntent;
       if (!paymentIntent || paymentIntent.status !== "succeeded") {
+        await localizedToast("Betalningen kunde inte bekrÃ¤ftas.");
+        suppressedToastMessage = "Betalningen kunde inte bekrÃ¤ftas.";
         toast("Betalningen kunde inte bekräftas.");
         return;
       }
@@ -3498,6 +3514,8 @@ async function paymentComplete() {
     ).replace(/\s/g, "");
 
     if (!cardNumber || cardNumber.length < 12) {
+      await localizedToast("Ange ett giltigt kortnummer (test).");
+      suppressedToastMessage = "Ange ett giltigt kortnummer (test).";
       toast("Ange ett giltigt kortnummer (test).");
       return;
     }
@@ -4126,6 +4144,11 @@ function togglePolicy(event) {
 function toast(message) {
   const toastEl = document.getElementById("toast");
   if (!toastEl) return;
+  if (suppressedToastMessage != null && message === suppressedToastMessage) {
+    suppressedToastMessage = null;
+    return;
+  }
+  suppressedToastMessage = null;
 
   toastEl.textContent = message;
   toastEl.classList.add("show");
@@ -4279,3 +4302,4 @@ window.applyTestPosition = applyTestPosition;
 window.loginWithBankId = loginWithBankId;
 window.togglePolicy = togglePolicy;
 window.selectDuration = selectDuration;
+
