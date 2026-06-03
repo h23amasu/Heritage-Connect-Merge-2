@@ -903,9 +903,6 @@
       p.className = className;
       if (blockIndex !== null) {
         p.dataset.blockIndex = String(blockIndex);
-        if (paragraphIndex === 0 && blockIndex > 0) {
-          p.classList.add("landing-desc-block-first");
-        }
       }
       p.textContent = paragraph;
       parent.appendChild(p);

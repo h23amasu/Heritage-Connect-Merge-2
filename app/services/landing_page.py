@@ -96,7 +96,7 @@ def render_landing_html(lang: str) -> str:
 
 
 def _sub_script_version(page: str) -> str:
-    return re.sub(r"/js/landing\.js\?v=\d+", "/js/landing.js?v=14", page)
+    return re.sub(r"/js/landing\.js\?v=\d+", "/js/landing.js?v=15", page)
 
 
 def serve_site_landing_response(site_ref: str, request: Request):
