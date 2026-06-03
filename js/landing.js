@@ -1,5 +1,5 @@
 /**
- * Landningssida från SMS-länk: /sites/{unesco_id}
+ * Landningssida fran SMS-lank: /sites/{unesco_id}
  */
 (function () {
   const pathMatch = window.location.pathname.match(/\/sites\/([^/]+)/);
@@ -8,6 +8,7 @@
   const lang = (params.get("lang") || document.documentElement.lang || "sv").slice(0, 2);
 
   const API_BASE = window.location.origin;
+  const UNESCO_DESC_LANGS = ["sv", "fi", "fr", "es", "de", "it", "pt", "ar", "zh", "ru", "ja"];
 
   function toast(message) {
     const el = document.getElementById("toast");
@@ -22,17 +23,106 @@
     return `https://whc.unesco.org/uploads/sites/site_${unescoId}.jpg`;
   }
 
-  function pickDescription(site) {
-    const key = `desc_${lang}`;
-    const localized = site[key] || "";
-    if (lang === "sv") {
-      return localized || site.desc_sv || site.description || site.desc_en || "";
-    }
-    return localized || site.description || site.desc_en || site.desc_sv || "";
+  function normalizeLanguageCode(value) {
+    return String(value || "sv").toLowerCase().slice(0, 2);
   }
 
-  function renderSite(site) {
-    document.title = `${site.name} – Heritage Connect`;
+  function getUnescoDescription(site, language) {
+    const key = `desc_${normalizeLanguageCode(language)}`;
+    return String(site?.[key] || "").trim();
+  }
+
+  function englishDescriptionForSite(site) {
+    return (getUnescoDescription(site, "en") || site?.description || "").trim();
+  }
+
+  function longestUnescoDescription(site) {
+    let best = (site?.description || "").trim();
+    let bestLang = "en";
+
+    for (const code of ["en", ...UNESCO_DESC_LANGS]) {
+      const text = getUnescoDescription(site, code);
+      if (text && text.length > best.length) {
+        best = text;
+        bestLang = code;
+      }
+    }
+
+    return { text: best, lang: bestLang };
+  }
+
+  function pickDescriptionSource(site, targetLang) {
+    const target = normalizeLanguageCode(targetLang);
+    const localized = getUnescoDescription(site, target);
+    const english = englishDescriptionForSite(site);
+    const longest = longestUnescoDescription(site);
+
+    if (target === "en") {
+      const text = english || longest.text || localized || "";
+      return { text, lang: "en" };
+    }
+
+    const referenceLen = Math.max(english.length, longest.text.length);
+    if (
+      localized &&
+      (!referenceLen || localized.length >= referenceLen * 0.85)
+    ) {
+      return { text: localized, lang: target };
+    }
+
+    if (english) {
+      return { text: english, lang: "en" };
+    }
+
+    if (longest.text) {
+      return longest;
+    }
+
+    return { text: "", lang: target };
+  }
+
+  async function translateViaApi(text, targetLang, sourceLang = "sv") {
+    const target = normalizeLanguageCode(targetLang);
+    const source = normalizeLanguageCode(sourceLang);
+
+    if (!text?.trim() || target === source) {
+      return text || "";
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/api/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          source_language: source,
+          target_language: target,
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && data?.translated_text?.trim()) {
+        return data.translated_text.trim();
+      }
+    } catch (_) {
+      /* ignore and fall back */
+    }
+
+    return text;
+  }
+
+  async function resolveSiteDescription(site, targetLang) {
+    const { text, lang: sourceLang } = pickDescriptionSource(site, targetLang);
+    if (!text) {
+      return "";
+    }
+    if (normalizeLanguageCode(targetLang) === normalizeLanguageCode(sourceLang)) {
+      return text;
+    }
+    return translateViaApi(text, targetLang, sourceLang);
+  }
+
+  async function renderSite(site) {
+    document.title = `${site.name} - Heritage Connect`;
     const img = document.getElementById("landingImage");
     const title = document.getElementById("landingTitle");
     const meta = document.getElementById("landingMeta");
@@ -40,17 +130,18 @@
     const profileLink = document.getElementById("landingProfileLink");
     const uid = String(site.unesco_id || site.id || siteRef);
 
-    if (title) title.textContent = site.name || "Världsarv";
+    if (title) title.textContent = site.name || "Varldsarv";
     if (meta) {
       const parts = [site.country, site.category, site.year_inscribed].filter(Boolean);
       meta.textContent = parts.join(" · ");
     }
     if (desc) {
-      desc.textContent = pickDescription(site) || "Ingen beskrivning tillgänglig.";
+      const description = await resolveSiteDescription(site, lang);
+      desc.textContent = description || "Ingen beskrivning tillganglig.";
     }
     if (img) {
       img.src = site.image_url || unescoImageUrl(uid);
-      img.alt = site.name || "Världsarv";
+      img.alt = site.name || "Varldsarv";
       img.onerror = () => {
         img.style.display = "none";
       };
@@ -107,7 +198,7 @@
         `${API_BASE}/api/sites/public/${encodeURIComponent(siteRef)}?lang=${lang}`
       );
       if (response.ok) {
-        renderSite(await response.json());
+        await renderSite(await response.json());
         return;
       }
     } catch (_) {
@@ -115,7 +206,7 @@
     }
 
     try {
-      renderSite(await loadFromLocalJson());
+      await renderSite(await loadFromLocalJson());
     } catch (_) {
       showError();
     }
@@ -128,12 +219,12 @@
     const question = input ? input.value.trim() : "";
 
     if (!question) {
-      toast("Skriv en fråga först.");
+      toast("Skriv en fraga forst.");
       return;
     }
     if (!site) return;
 
-    if (answerBox) answerBox.textContent = "AI söker svar…";
+    if (answerBox) answerBox.textContent = "AI soker svar...";
 
     try {
       const response = await fetch(`${API_BASE}/api/ai/ask`, {
@@ -150,14 +241,14 @@
         throw new Error(data.detail || "AI request failed");
       }
       if (answerBox) {
-        answerBox.textContent = data.answer || "Inget svar tillgängligt.";
+        answerBox.textContent = data.answer || "Inget svar tillgangligt.";
       }
     } catch (error) {
       if (answerBox) {
         answerBox.textContent =
           error?.message && error.message !== "AI request failed"
-            ? `Kunde inte nå AI-tjänsten: ${error.message}`
-            : "Kunde inte nå AI-tjänsten.";
+            ? `Kunde inte na AI-tjansten: ${error.message}`
+            : "Kunde inte na AI-tjansten.";
       }
     }
   }
