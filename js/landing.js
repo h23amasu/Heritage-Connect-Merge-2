@@ -856,33 +856,43 @@
     container.replaceChildren();
   }
 
-  function ensureDescriptionStatus(container) {
-    let status = container.querySelector(".landing-desc-status");
-    if (!status) {
-      status = document.createElement("p");
-      status.className = "landing-desc-status";
-      status.setAttribute("aria-live", "polite");
-      container.prepend(status);
+  function ensureDescriptionLoader(container) {
+    let loader = container.querySelector(".landing-desc-loader");
+    if (!loader) {
+      loader = document.createElement("div");
+      loader.className = "landing-desc-loader translation-loader";
+      loader.setAttribute("aria-live", "polite");
+
+      const spinner = document.createElement("span");
+      spinner.className = "translation-spinner";
+      spinner.setAttribute("aria-hidden", "true");
+
+      const text = document.createElement("span");
+      text.className = "landing-desc-loader-text";
+
+      loader.appendChild(spinner);
+      loader.appendChild(text);
+      container.prepend(loader);
     }
-    return status;
+    return loader.querySelector(".landing-desc-loader-text");
   }
 
   function setDescriptionLoadingProgress(container, current, total) {
     if (!container) return;
-    const status = ensureDescriptionStatus(container);
+    const statusText = ensureDescriptionLoader(container);
     container.classList.add("landing-desc-loading");
     if (!total || total <= 1) {
-      status.textContent = landingT("LOADING_UNESCO");
+      statusText.textContent = landingT("LOADING_UNESCO");
       return;
     }
-    status.textContent = landingT("LOADING_UNESCO_PROGRESS", {
+    statusText.textContent = landingT("LOADING_UNESCO_PROGRESS", {
       current: String(current),
       total: String(total),
     });
   }
 
   function clearDescriptionStatus(container) {
-    container?.querySelector(".landing-desc-status")?.remove();
+    container?.querySelector(".landing-desc-loader")?.remove();
     container?.classList.remove("landing-desc-loading");
   }
 
@@ -1029,7 +1039,9 @@
     if (hasLongUnescoText(site)) {
       if (descContainer) {
         clearDescriptionContainer(descContainer);
-        setDescriptionLoadingProgress(descContainer, 0, 1);
+        if (normalizeLanguageCode(lang) !== "en") {
+          setDescriptionLoadingProgress(descContainer, 0, 1);
+        }
       }
       renderLongDescription(site, lang).catch(() => {
         if (!descContainer) return;

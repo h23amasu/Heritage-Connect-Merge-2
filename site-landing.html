@@ -43,12 +43,6 @@
       line-height: 1.65;
     }
     .landing-desc-loading { color: var(--muted); font-style: italic; }
-    .landing-desc-status {
-      margin: 0 0 12px;
-      font-size: 14px;
-      color: var(--muted);
-      font-style: italic;
-    }
     .landing-actions { margin: 24px 0 0; }
     .landing-actions a {
       display: block;
@@ -60,7 +54,14 @@
       color: #fff;
       font-weight: 600;
     }
-    .landing-loading { color: var(--muted); padding: 40px 0; text-align: center; }
+    .landing-loading {
+      display: flex;
+      justify-content: center;
+      padding: 40px 0;
+    }
+    .landing-desc-loader {
+      margin: 0 0 16px;
+    }
     .landing-panel {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -81,7 +82,12 @@
         <a class="secondary-btn" id="landingNewspaperLink" href="/demo" data-i18n="TO_NEWSPAPER">Till tidningen</a>
       </header>
 
-      <div id="landingLoading" class="landing-loading" data-i18n="LOADING_SITE">Laddar plats…</div>
+      <div id="landingLoading" class="landing-loading">
+        <span class="translation-loader" aria-live="polite">
+          <span class="translation-spinner" aria-hidden="true"></span>
+          <span data-i18n="LOADING_SITE">Laddar plats…</span>
+        </span>
+      </div>
 
       <div id="landingContent" style="display:none">
         <div class="landing-hero">
@@ -114,6 +120,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/js/landing.js?v=13"></script>
+  <script src="/js/landing.js?v=14"></script>
 </body>
 </html>
