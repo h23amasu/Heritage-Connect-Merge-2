@@ -245,6 +245,10 @@ const UI_MODAL_I18N = {
       "Mock payment in demo. Set PAYMENT_PROVIDER=stripe and STRIPE_SECRET_KEY in .env for real sandbox.",
     "Stripe testläge – ange kortuppgifter nedan. Testkort: 4242 4242 4242 4242.":
       "Stripe test mode – enter card details below. Test card: 4242 4242 4242 4242.",
+    "Stripe testläge – riktiga kort fungerar inte. Testkort: 4242 4242 4242 4242, valfritt datum/CVC.":
+      "Stripe test mode – real cards do not work. Test card: 4242 4242 4242 4242, any future date/CVC.",
+    "Stripe – ange kortuppgifter nedan.":
+      "Stripe – enter card details below.",
     "E-post för bekräftelse och OwnTracks": "Email for confirmation and OwnTracks",
     "E-post för bekräftelse (samma som prenumeration)": "Email for confirmation (same as subscription)",
     "Alla får bekräftelse via e-post med kvitto och instruktioner för OwnTracks-appen (GPS i bakgrunden).":
@@ -1320,12 +1324,30 @@ const STRIPE_SUPPORTED_LOCALES = new Set([
   "ro", "ru", "sk", "sl", "sv", "th", "tr", "vi", "zh", "zh-HK", "zh-TW"
 ]);
 
+/** ISO 639-1 → Stripe Elements locale (Stripe använder t.ex. nb, inte no). */
+const STRIPE_LOCALE_ALIASES = {
+  no: "nb",
+  nn: "nb",
+};
+
 function stripeLocaleForLang(lang) {
   const code = normalizeLanguageCode(lang);
-  if (STRIPE_SUPPORTED_LOCALES.has(code)) {
-    return code;
+  const mapped = STRIPE_LOCALE_ALIASES[code] || code;
+  if (STRIPE_SUPPORTED_LOCALES.has(mapped)) {
+    return mapped;
   }
-  return "auto";
+  if (code === "sv") {
+    return "sv";
+  }
+  return "en";
+}
+
+async function reloadStripeForReaderLanguage(lang = getActiveReaderLang()) {
+  if (!PAYMENT_CONFIG.stripe_enabled) return;
+  const paymentOpen = document.getElementById("payment")?.classList.contains("active");
+  const modalOpen = document.getElementById("serviceModal")?.classList.contains("show");
+  if (!paymentOpen && !modalOpen) return;
+  await prepareStripePaymentStep(lang);
 }
 
 let locationReportTimer = null;
@@ -1413,15 +1435,16 @@ function destroyStripePaymentElement() {
     stripePaymentElement = null;
   }
   stripeElements = null;
+  stripeClient = null;
   stripeClientSecret = null;
   stripeIntentAmount = null;
   stripeLocale = null;
 }
 
-async function prepareStripePaymentStep() {
+async function prepareStripePaymentStep(lang = resolveCheckoutLang()) {
   await loadPaymentConfig();
   await updatePaymentProviderUi();
-  const targetStripeLocale = stripeLocaleForLang(getActiveReaderLang());
+  const targetStripeLocale = stripeLocaleForLang(lang);
 
   const mockFields = document.getElementById("mockPaymentFields");
   const stripeMount = document.getElementById("stripePaymentMount");
@@ -1474,9 +1497,12 @@ async function prepareStripePaymentStep() {
     stripeLocale = targetStripeLocale;
     stripeElements = stripeClient.elements({
       clientSecret: stripeClientSecret,
+      locale: targetStripeLocale,
       appearance: { theme: "stripe" },
     });
-    stripePaymentElement = stripeElements.create("payment");
+    stripePaymentElement = stripeElements.create("payment", {
+      layout: "tabs",
+    });
     stripePaymentElement.mount("#stripe-payment-element");
   } catch (error) {
     console.error("Stripe init failed:", error);
@@ -2722,9 +2748,10 @@ async function changeDemoLanguage(lang) {
   }
   if (getActiveReaderLang() !== target) return;
   await refreshGeoUiSafeguard();
-  if (document.getElementById("serviceModal")?.getAttribute("aria-hidden") === "false") {
+  if (document.getElementById("serviceModal")?.classList.contains("show")) {
     await refreshServiceModalI18n(target);
   }
+  await reloadStripeForReaderLanguage(target);
 }
 
 function readStoredReaderLang() {
