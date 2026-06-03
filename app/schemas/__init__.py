@@ -182,7 +182,7 @@ class SMSResponse(BaseModel):
 
 class AIQuestion(BaseModel):
     user_id: Optional[int] = None
-    site_id: int
+    site_id: int | str  # UNESCO-id från landningssidan (t.ex. "1134")
     question: str = Field(..., min_length=3, max_length=500)
     language: str = "sv"
 

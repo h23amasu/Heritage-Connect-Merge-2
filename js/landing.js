@@ -67,6 +67,38 @@
     return READER_LABELS[code] || READER_LABELS.en;
   }
 
+  /** Vad UNESCO:s kriterium (i)–(vi) betyder för läsaren */
+  const CRITERION_EXPLAIN = {
+    sv: {
+      "(i)": "Platsen är ett konstnärligt eller vetenskapligt mästerverk.",
+      "(ii)": "Platsen visar ett viktigt utbyte mellan mänskliga värderingar eller har haft stort internationellt inflytande.",
+      "(iii)": "Platsen är ett unikt vittnesbörd om en kultur eller civilisation.",
+      "(iv)": "Platsen är ett enastående exempel på en viss typ av byggnad, landskap eller teknik.",
+      "(v)": "Platsen är ett traditionellt samhälle eller traditionellt bruk av land/hav.",
+      "(vi)": "Platsen har koppling till viktiga händelser eller levande traditioner.",
+    },
+    en: {
+      "(i)": "The site represents a masterpiece of human creativity.",
+      "(ii)": "The site shows important interchange of human values or major international influence.",
+      "(iii)": "The site bears unique testimony to a cultural tradition or civilization.",
+      "(iv)": "The site is an outstanding example of a type of building, landscape, or technology.",
+      "(v)": "The site is a traditional human settlement or land/sea use.",
+      "(vi)": "The site is associated with living traditions or significant events.",
+    },
+    fi: {
+      "(ii)": "Kohde kuvastaa merkittävää kansainvälistä vuorovaikutusta tai vaikutusta.",
+      "(iv)": "Kohde on erinomainen esimerkki tietystä paikka- tai rakennustyypistä.",
+    },
+  };
+
+  function criterionExplanation(rawTitle, targetLang) {
+    const roman = String(rawTitle || "").match(/\([ivx]+\)/i);
+    if (!roman) return "";
+    const code = normalizeLanguageCode(targetLang);
+    const hints = CRITERION_EXPLAIN[code] || CRITERION_EXPLAIN.en;
+    return hints[roman[0].toLowerCase()] || hints[roman[0]] || "";
+  }
+
   function toast(message) {
     const el = document.getElementById("toast");
     if (!el) return;
@@ -122,13 +154,14 @@
       if (!roman) {
         return labels.criterion || "Kriterium";
       }
+      const numeral = roman[0].replace(/[()]/g, "").toUpperCase();
       const templates = {
-        sv: `Kriterium ${roman[0]}`,
-        en: `Criterion ${roman[0]}`,
-        fi: `Kriteeri ${roman[0]}`,
-        de: `Kriterium ${roman[0]}`,
-        fr: `Critère ${roman[0]}`,
-        es: `Criterio ${roman[0]}`,
+        sv: `UNESCO-kriterium ${numeral}`,
+        en: `UNESCO criterion ${numeral}`,
+        fi: `UNESCO-kriteeri ${numeral}`,
+        de: `UNESCO-Kriterium ${numeral}`,
+        fr: `Critère UNESCO ${numeral}`,
+        es: `Criterio UNESCO ${numeral}`,
       };
       return templates[code] || templates.en;
     }
@@ -275,6 +308,12 @@
         h4.textContent = item.heading;
         article.appendChild(h4);
       }
+      if (item.criterionHint) {
+        const hint = document.createElement("p");
+        hint.className = "landing-criterion-hint";
+        hint.textContent = item.criterionHint;
+        article.appendChild(hint);
+      }
       appendParagraphs(article, "landing-desc-para", item.body);
       section.appendChild(article);
     });
@@ -313,11 +352,41 @@
         heading: part.titleRaw
           ? localizeSectionHeading(part.titleRaw, target)
           : "",
+        criterionHint: part.titleRaw
+          ? criterionExplanation(part.titleRaw, target)
+          : "",
         body,
       });
     }
 
     appendJustificationSections(container, rendered, target);
+  }
+
+  function parseSiteId(site) {
+    const raw = String(site?.unesco_id || site?.id || siteRef || "").trim();
+    const numeric = Number.parseInt(raw, 10);
+    return Number.isFinite(numeric) ? numeric : raw;
+  }
+
+  function formatApiError(data, fallback) {
+    if (!data?.detail) return fallback;
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map(entry => entry?.msg || entry?.message || "")
+        .filter(Boolean)
+        .join(" ");
+    }
+    return fallback;
+  }
+
+  function showPageContent() {
+    const loading = document.getElementById("landingLoading");
+    const content = document.getElementById("landingContent");
+    const error = document.getElementById("landingError");
+    if (loading) loading.style.display = "none";
+    if (error) error.style.display = "none";
+    if (content) content.style.display = "block";
   }
 
   async function renderSite(site) {
@@ -328,23 +397,13 @@
     const profileLink = document.getElementById("landingProfileLink");
     const uid = String(site.unesco_id || site.id || siteRef);
 
+    window.__landingSite = { ...site, unesco_id: uid };
+    showPageContent();
+
     if (title) title.textContent = site.name || "Världsarv";
     if (meta) {
       const parts = [site.country, site.category, site.year_inscribed].filter(Boolean);
       meta.textContent = parts.join(" · ");
-    }
-
-    if (hasLongUnescoText(site)) {
-      await renderLongDescription(site, lang);
-    } else {
-      const container = document.getElementById("landingDescription");
-      clearDescriptionContainer(container);
-      const localized = getUnescoDescription(site, lang) || site.description || "";
-      appendParagraphs(
-        container,
-        "landing-desc-intro",
-        localized || "Ingen beskrivning tillgänglig."
-      );
     }
 
     if (img) {
@@ -365,14 +424,29 @@
       profileLink.href = `/demo?${profileParams.toString()}`;
     }
 
-    window.__landingSite = { ...site, unesco_id: uid };
-
-    const loading = document.getElementById("landingLoading");
-    const content = document.getElementById("landingContent");
-    const error = document.getElementById("landingError");
-    if (loading) loading.style.display = "none";
-    if (error) error.style.display = "none";
-    if (content) content.style.display = "block";
+    const descContainer = document.getElementById("landingDescription");
+    if (hasLongUnescoText(site)) {
+      try {
+        await renderLongDescription(site, lang);
+      } catch (_) {
+        if (descContainer) {
+          clearDescriptionContainer(descContainer);
+          appendParagraphs(
+            descContainer,
+            "landing-desc-para",
+            "Kunde inte visa hela UNESCO-texten just nu. Du kan fortfarande ställa frågor till AI nedan."
+          );
+        }
+      }
+    } else if (descContainer) {
+      clearDescriptionContainer(descContainer);
+      const localized = getUnescoDescription(site, lang) || site.description || "";
+      appendParagraphs(
+        descContainer,
+        "landing-desc-intro",
+        localized || "Ingen beskrivning tillgänglig."
+      );
+    }
   }
 
   function showError() {
@@ -446,7 +520,16 @@
       toast("Skriv en fråga först.");
       return;
     }
-    if (!site) return;
+    if (!site) {
+      toast("Platsen laddas fortfarande – vänta ett ögonblick.");
+      return;
+    }
+
+    const siteId = parseSiteId(site);
+    if (!siteId) {
+      toast("Ogiltigt plats-id.");
+      return;
+    }
 
     if (answerBox) answerBox.textContent = "AI söker svar...";
 
@@ -455,28 +538,36 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          site_id: site.unesco_id || site.id,
+          site_id: siteId,
           question,
           language: lang,
         }),
       });
-      const data = await response.json();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_) {
+        data = {};
+      }
       if (!response.ok) {
-        throw new Error(data.detail || "AI request failed");
+        throw new Error(formatApiError(data, `AI-fel (${response.status})`));
       }
       if (answerBox) {
         answerBox.textContent = data.answer || "Inget svar tillgängligt.";
       }
     } catch (error) {
       if (answerBox) {
-        answerBox.textContent =
-          error?.message && error.message !== "AI request failed"
-            ? `Kunde inte nå AI-tjänsten: ${error.message}`
-            : "Kunde inte nå AI-tjänsten.";
+        answerBox.textContent = `Kunde inte nå AI: ${error?.message || "okänt fel"}`;
       }
     }
   }
 
   document.getElementById("landingAiBtn")?.addEventListener("click", askAi);
+  document.getElementById("landingAiInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      askAi();
+    }
+  });
   loadSite();
 })();

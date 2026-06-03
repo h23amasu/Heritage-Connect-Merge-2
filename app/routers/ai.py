@@ -24,19 +24,21 @@ def ask_question(question: AIQuestion, db: Session = Depends(get_db)):
     The AI uses only local sources (UNESCO PDFs).
     """
     lang = getattr(question, "language", None) or "sv"
+    site_ref = str(question.site_id).strip()
     try:
         answer, sources, needs_followup = ask_ai(
-            db, question.site_id, question.question, language=lang
+            db, site_ref, question.question, language=lang
         )
     except Exception:
         answer, sources, needs_followup = ask_ai(
-            None, question.site_id, question.question, language=lang
+            None, site_ref, question.question, language=lang
         )
 
+    log_site_id = int(site_ref) if site_ref.isdigit() else 0
     try:
         log = AIQuery(
             user_id=question.user_id,
-            site_id=question.site_id,
+            site_id=log_site_id,
             question=question.question,
             answer=answer,
         )

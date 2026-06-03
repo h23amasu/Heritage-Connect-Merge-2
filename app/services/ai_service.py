@@ -680,7 +680,7 @@ def _try_openai_answer(
 
 def ask_ai(
     db: Optional[Session],
-    site_id: int,
+    site_id: int | str,
     question: str,
     language: str = "sv",
 ) -> Tuple[str, List[str], bool]:
