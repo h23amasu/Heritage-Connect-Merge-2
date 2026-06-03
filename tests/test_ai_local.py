@@ -321,6 +321,7 @@ def test_ai_ask_drottningholm_area_in_hectares():
     assert data["needs_followup"] is False
     assert "162" in answer and "429" in answer
     assert "ha" in answer
+    assert "inskrivna fastighetens" in answer or "inscribed property" in answer
     assert "kungliga drottningholm" not in answer
     assert not answer.startswith(".")
 

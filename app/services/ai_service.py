@@ -732,10 +732,26 @@ def _extract_area_fact_sentence(context: str) -> str:
     return ""
 
 
+def _format_area_amount(raw: str) -> str:
+    return re.sub(r"\s+", " ", (raw or "").replace(".", " ").strip())
+
+
 def _answer_property_area_from_context(context: str, language: str) -> str:
     sentence = _extract_area_fact_sentence(context)
     if not sentence:
         return ""
+    match = re.search(r"(\d[\d\s.,]+)\s*ha", sentence, re.IGNORECASE)
+    if match:
+        amount = _format_area_amount(match.group(1))
+        lang = _normalize_language(language)
+        if lang == "sv":
+            return f"Den inskrivna fastighetens nuvarande yta är {amount} ha."
+        if lang == "it":
+            return (
+                f"L'area attuale della proprietà iscritta è di {amount} ha."
+            )
+        if lang == "en":
+            return f"The current area of the inscribed property is {amount} ha."
     return _localize_answer(sentence, "en", language)
 
 
