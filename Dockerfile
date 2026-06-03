@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-# deploy-bust: 2026-06-03-v117-stability
+# deploy-bust: 2026-06-03-v118-startup-fix
 
 WORKDIR /app
 
