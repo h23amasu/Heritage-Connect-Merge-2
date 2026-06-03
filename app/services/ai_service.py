@@ -308,6 +308,24 @@ _SIGNIFICANCE_HINTS = (
     "what is unique",
     "cosa è unico",
 )
+_AREA_QUESTION_RE = re.compile(
+    r"\b(?:"
+    r"yta|ytan|area|storlek|size|hectare|hektar|hectares|"
+    r"hur stor|hur stort|how (?:big|large)|fläche|superficie|"
+    r"quanto è grande|surface|acreage"
+    r")\b",
+    re.IGNORECASE,
+)
+_AREA_FACT_RE = re.compile(
+    r"(?:"
+    r"current area of the inscribed property is|"
+    r"area of the inscribed property is|"
+    r"the inscribed property is|"
+    r"nuvarande yta|inskrivna fastighetens nuvarande yta|"
+    r"current area of the property is"
+    r")[^.]{0,120}?(\d[\d\s.,]*\s*ha)",
+    re.IGNORECASE,
+)
 _SIGNIFICANCE_CONTEXT_TERMS = (
     "outstanding",
     "universal",
@@ -521,9 +539,6 @@ def _language_score(sentence: str, language: str) -> int:
 
 def _context_match_language(language: str) -> str:
     """UNESCO WHC-långtext är på engelska – matcha frågor mot den."""
-    lang = _normalize_language(language)
-    if lang == "sv":
-        return "sv"
     return "en"
 
 
@@ -673,11 +688,55 @@ def _is_personal_question(question: str) -> bool:
 
 
 def _split_sentences(context: str) -> list[str]:
-    return [
-        s.strip()
-        for s in context.replace("\n", " ").split(".")
-        if s.strip() and len(s.strip()) > 20
-    ]
+    text = re.sub(r"\s+", " ", (context or "").replace("\n", " ")).strip()
+    if not text:
+        return []
+    protected = re.sub(r"(\d)\.(\d)", r"\1<DECIMAL>\2", text)
+    results: list[str] = []
+    for part in protected.split("."):
+        piece = part.replace("<DECIMAL>", ".").strip()
+        if len(piece) >= 20:
+            results.append(piece)
+    return results
+
+
+def _clean_citation_unit(text: str) -> str:
+    cleaned = re.sub(r"^[\s.\n\r]+", "", (text or "").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned
+
+
+def _asks_property_area_or_size(question: str) -> bool:
+    return bool(_AREA_QUESTION_RE.search(question or ""))
+
+
+def _extract_area_fact_sentence(context: str) -> str:
+    """Hitta mening om inskriven yta (t.ex. 162.429 ha) i UNESCO-texten."""
+    text = (context or "").replace("\n", " ")
+    match = _AREA_FACT_RE.search(text)
+    if match:
+        start = max(0, text.rfind(".", 0, match.start()) + 1)
+        end = text.find(".", match.end())
+        if end == -1:
+            end = min(len(text), match.end() + 120)
+        return _clean_citation_unit(text[start:end])
+
+    for unit in _split_sentences(text):
+        lower = unit.lower()
+        if "ha" in lower and any(
+            token in lower
+            for token in ("area", "property", "inscribed", "yta", "fastighet", "nuvarande")
+        ):
+            if re.search(r"\d[\d\s.,]*\s*ha", unit, re.IGNORECASE):
+                return _clean_citation_unit(unit)
+    return ""
+
+
+def _answer_property_area_from_context(context: str, language: str) -> str:
+    sentence = _extract_area_fact_sentence(context)
+    if not sentence:
+        return ""
+    return _localize_answer(sentence, "en", language)
 
 
 def _iter_search_units(context: str) -> list[str]:
@@ -688,9 +747,20 @@ def _iter_search_units(context: str) -> list[str]:
             units.extend(_split_sentences(chunk))
         elif len(chunk) > 20:
             units.append(chunk)
-    if units:
-        return units
-    return _split_sentences(context)
+    if not units:
+        units = _split_sentences(context)
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for unit in units:
+        normalized = _clean_citation_unit(unit)
+        if len(normalized) < 25:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(normalized)
+    return cleaned
 
 
 def _asks_uniqueness_or_significance(question: str) -> bool:
@@ -785,7 +855,8 @@ def _split_context_chunks(context: str) -> list[str]:
 
 
 def _join_sentences(sentences: list[str], max_sentences: int = 3, language: str = "sv") -> str:
-    filtered = _filter_sentences_for_language(sentences, language)
+    normalized = [_clean_citation_unit(s) for s in sentences if _clean_citation_unit(s)]
+    filtered = _filter_sentences_for_language(normalized, language)
     if not filtered:
         return ""
     selected = filtered[:max_sentences]
@@ -988,11 +1059,9 @@ def _heritage_site_context(site_id: int | str, language: str) -> tuple[str, list
         sources.extend(whc_sources)
 
     description, source_key = _pick_site_description(site, language)
-    if description and (not whc_text or lang != "en"):
-        blob = "\n\n".join(parts)
-        if description not in blob:
-            parts.append(description)
-            sources.append(f"heritage-sites.json ({source_key})")
+    if description and not whc_text:
+        parts.append(description)
+        sources.append(f"heritage-sites.json ({source_key})")
 
     if not parts and description:
         parts.append(description)
@@ -1166,6 +1235,11 @@ def _intro_subject_matches_site(question: str, site: dict) -> bool:
 def _cite_from_context(
     question: str, context: str, language: str, site: Optional[dict] = None
 ) -> str:
+    if _asks_property_area_or_size(question):
+        area_answer = _answer_property_area_from_context(context, language)
+        if area_answer:
+            return area_answer
+
     if _asks_uniqueness_or_significance(question):
         significance = _significance_from_context(context, language, site=site)
         if significance:
@@ -1390,6 +1464,13 @@ def ask_ai(
         question
     ):
         return _pick_language_fallback(language, "no_info"), sources, False
+
+    if intent == QuestionIntent.HERITAGE_CONTENT and _asks_property_area_or_size(
+        question
+    ):
+        area_answer = _answer_property_area_from_context(context, language)
+        if area_answer:
+            return area_answer, sources, False
 
     if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
         openai_result = _try_openai_answer(question, context, site, language)

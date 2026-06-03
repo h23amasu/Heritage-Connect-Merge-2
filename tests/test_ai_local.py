@@ -306,6 +306,25 @@ def test_ai_ask_acropolis_listing_year_italian():
     assert "patrimonio mondiale" in data["answer"].lower()
 
 
+def test_ai_ask_drottningholm_area_in_hectares():
+    response = client.post(
+        "/api/ai/ask",
+        json={
+            "site_id": 559,
+            "question": "hur stor är ytan om drottningholms slott?",
+            "language": "sv",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    answer = data["answer"].lower()
+    assert data["needs_followup"] is False
+    assert "162" in answer and "429" in answer
+    assert "ha" in answer
+    assert "kungliga drottningholm" not in answer
+    assert not answer.startswith(".")
+
+
 def test_ai_ask_keyword_citation_from_description():
     response = client.post(
         "/api/ai/ask",
