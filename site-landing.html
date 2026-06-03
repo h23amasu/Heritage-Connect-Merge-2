@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="sv" id="landingHtmlRoot">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -55,12 +55,12 @@
       <header class="topbar">
         <div>
           <h1>Heritage Connect</h1>
-          <p class="step-label">Du är nära ett UNESCO-världsarv</p>
+          <p class="step-label" data-i18n="NEAR_SITE">Du är nära ett UNESCO-världsarv</p>
         </div>
-        <a class="secondary-btn" href="/demo">Till tidningen</a>
+        <a class="secondary-btn" id="landingNewspaperLink" href="/demo" data-i18n="TO_NEWSPAPER">Till tidningen</a>
       </header>
 
-      <div id="landingLoading" class="landing-loading">Laddar plats…</div>
+      <div id="landingLoading" class="landing-loading" data-i18n="LOADING_SITE">Laddar plats…</div>
 
       <div id="landingContent" style="display:none">
         <div class="landing-hero">
@@ -71,27 +71,28 @@
         <div id="landingDescription" aria-live="polite"></div>
 
         <div class="landing-panel">
-          <h3>Fråga AI om detta världsarv</h3>
-          <p class="small-muted">AI:n läser hela din fråga och svarar från UNESCO:s långa källtexter ovan – inga gissningar. Fråga t.ex. om Parthenon, demokrati, eller när platsen blev världsarv.</p>
+          <h3 data-i18n="AI_TITLE">Fråga AI om detta världsarv</h3>
+          <p class="small-muted" data-i18n="AI_HELP">AI:n läser hela din fråga och svarar från UNESCO:s långa källtexter ovan – inga gissningar. Fråga t.ex. om Parthenon, demokrati, eller när platsen blev världsarv.</p>
           <div class="ai-question-row">
-            <input id="landingAiInput" type="text" placeholder="Vad är unikt med detta världsarv?" />
-            <button class="primary-btn" type="button" id="landingAiBtn">Fråga</button>
+            <input id="landingAiInput" type="text" data-i18n-placeholder="AI_PLACEHOLDER" placeholder="Vad är unikt med detta världsarv?" />
+            <button class="primary-btn" type="button" id="landingAiBtn" data-i18n="AI_ASK_BTN">Fråga</button>
           </div>
           <div class="ai-answer" id="landingAiAnswer" role="status" aria-live="polite"></div>
         </div>
 
         <div class="landing-actions">
-          <a id="landingProfileLink" href="/demo?step=confirmation">Hantera prenumeration och profil</a>
+          <a id="landingProfileLink" href="/demo?step=confirmation" data-i18n="MANAGE_PROFILE">Hantera prenumeration och profil</a>
         </div>
       </div>
 
       <div id="landingError" style="display:none" class="info-box">
-        Platsen kunde inte hittas. <a href="/demo">Gå till Heritage Connect</a>
+        <span id="landingErrorText" data-i18n="SITE_NOT_FOUND">Platsen kunde inte hittas.</span>
+        <a id="landingErrorLink" href="/demo" data-i18n="GO_TO_HC">Gå till Heritage Connect</a>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
-  <script src="/js/landing.js?v=10"></script>
+  <script src="/js/landing.js?v=11"></script>
 </body>
 </html>
