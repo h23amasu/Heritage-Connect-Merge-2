@@ -1,6 +1,6 @@
 /**
  * Landningssida fran SMS-lank: /sites/{unesco_id}
- * Visar langa UNESCO-texter (description_en + justification_en) fran whc001.
+ * Lang UNESCO-text (whc001) med fasta avsnittsrubriker – rubriker oversatts inte via API.
  */
 (function () {
   const pathMatch = window.location.pathname.match(/\/sites\/([^/]+)/);
@@ -9,21 +9,31 @@
   const lang = (params.get("lang") || document.documentElement.lang || "sv").slice(0, 2);
 
   const API_BASE = window.location.origin;
-  const UNESCO_DESC_LANGS = ["sv", "fi", "fr", "es", "de", "it", "pt", "ar", "zh", "ru", "ja"];
-  const SECTION_SPLIT =
-    /(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management))/gi;
 
-  const SECTION_TITLES = {
+  const SECTION_SPLIT =
+    /(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements))/gi;
+
+  const SECTION_HEADER =
+    /^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*/i;
+
+  const HEADING_LABELS = {
     sv: {
-      description: "Om platsen",
-      outstanding: "Outstanding Universal Value",
-      brief: "Sammanfattning",
+      "brief synthesis": "Sammanfattning",
+      integrity: "Integritet",
+      authenticity: "Äkthet",
+      "protection and management requirements": "Skydd och förvaltning",
     },
     en: {
-      description: "About the site",
-      outstanding: "Outstanding Universal Value",
-      brief: "Brief synthesis",
+      "brief synthesis": "Brief synthesis",
+      integrity: "Integrity",
+      authenticity: "Authenticity",
+      "protection and management requirements": "Protection and management",
     },
+  };
+
+  const OUV_HEADING = {
+    sv: "Unescos motivering (Outstanding Universal Value)",
+    en: "Outstanding Universal Value",
   };
 
   function toast(message) {
@@ -41,11 +51,6 @@
 
   function normalizeLanguageCode(value) {
     return String(value || "sv").toLowerCase().slice(0, 2);
-  }
-
-  function sectionLabels(targetLang) {
-    const code = normalizeLanguageCode(targetLang);
-    return SECTION_TITLES[code] || SECTION_TITLES.en;
   }
 
   function getUnescoDescription(site, language) {
@@ -69,30 +74,75 @@
     );
   }
 
+  function headingKey(rawTitle) {
+    return String(rawTitle || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function localizeSectionHeading(rawTitle, targetLang) {
+    const code = normalizeLanguageCode(targetLang);
+    const labels = HEADING_LABELS[code] || HEADING_LABELS.en;
+    const key = headingKey(rawTitle);
+
+    if (key.startsWith("criterion")) {
+      const roman = rawTitle.match(/\([ivx]+\)/i);
+      if (code === "sv" && roman) {
+        return `Kriterium ${roman[0]}`;
+      }
+      return rawTitle.trim();
+    }
+
+    return labels[key] || rawTitle.trim();
+  }
+
   function splitJustificationSections(text) {
     const raw = String(text || "").trim();
     if (!raw) return [];
-    if (!SECTION_SPLIT.test(raw)) {
-      SECTION_SPLIT.lastIndex = 0;
-      return [{ title: "", body: raw }];
-    }
+
+    const parts = SECTION_SPLIT.test(raw) ? raw.split(SECTION_SPLIT) : [raw];
     SECTION_SPLIT.lastIndex = 0;
-    return raw
-      .split(SECTION_SPLIT)
+
+    return parts
       .map(part => part.trim())
       .filter(part => part.length > 40)
       .map(part => {
-        const match = part.match(
-          /^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management)\s*/i
-        );
+        const match = part.match(SECTION_HEADER);
         if (!match) {
-          return { title: "", body: part };
+          return { titleKey: "", titleRaw: "", body: part };
         }
         return {
-          title: match[1],
+          titleKey: headingKey(match[1]),
+          titleRaw: match[1],
           body: part.slice(match[0].length).trim() || part,
         };
       });
+  }
+
+  function splitIntoParagraphs(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) return [];
+    if (trimmed.includes("\n\n")) {
+      return trimmed
+        .split(/\n\s*\n+/)
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+    }
+    const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+    if (!sentences || sentences.length <= 4) {
+      return [trimmed];
+    }
+    const paragraphs = [];
+    let bucket = "";
+    sentences.forEach((sentence, index) => {
+      bucket += sentence.trim() + " ";
+      if ((index + 1) % 3 === 0 || index === sentences.length - 1) {
+        paragraphs.push(bucket.trim());
+        bucket = "";
+      }
+    });
+    return paragraphs.filter(Boolean);
   }
 
   async function translateViaApi(text, targetLang, sourceLang = "en") {
@@ -118,63 +168,78 @@
         return data.translated_text.trim();
       }
     } catch (_) {
-      /* ignore and fall back */
+      /* ignore */
     }
 
     return text;
   }
 
-  async function translateChunk(text, targetLang) {
+  async function translateBody(text, targetLang) {
     const trimmed = String(text || "").trim();
     if (!trimmed) return "";
-    if (trimmed.length <= 4500) {
-      return translateViaApi(trimmed, targetLang, "en");
+    const target = normalizeLanguageCode(targetLang);
+    if (target === "en") {
+      return trimmed;
     }
-    const parts = trimmed.match(/[\s\S]{1,4200}(?:\.\s|$)/g) || [trimmed];
+    if (trimmed.length <= 4800) {
+      return translateViaApi(trimmed, target, "en");
+    }
+    const sentences = trimmed.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [trimmed];
+    const blocks = [];
+    let chunk = "";
+    for (const sentence of sentences) {
+      if ((chunk + sentence).length > 4000 && chunk) {
+        blocks.push(chunk.trim());
+        chunk = sentence;
+      } else {
+        chunk += sentence;
+      }
+    }
+    if (chunk.trim()) {
+      blocks.push(chunk.trim());
+    }
     const translated = [];
-    for (const part of parts) {
-      translated.push(await translateViaApi(part.trim(), targetLang, "en"));
+    for (const block of blocks) {
+      translated.push(await translateViaApi(block, target, "en"));
     }
-    return translated.filter(Boolean).join("\n\n");
+    return translated.filter(Boolean).join(" ");
   }
 
   function clearDescriptionContainer(container) {
     if (!container) return;
     container.classList.remove("landing-desc-loading");
-    container.innerHTML = "";
     container.replaceChildren();
   }
 
-  function appendParagraph(parent, className, text) {
-    if (!text?.trim()) return;
-    const p = document.createElement("p");
-    p.className = className;
-    p.textContent = text.trim();
-    parent.appendChild(p);
+  function appendParagraphs(parent, className, text) {
+    splitIntoParagraphs(text).forEach(paragraph => {
+      const p = document.createElement("p");
+      p.className = className;
+      p.textContent = paragraph;
+      parent.appendChild(p);
+    });
   }
 
-  function appendSection(container, heading, chunks) {
-    if (!chunks.length) return;
+  function appendJustificationSections(container, sections, targetLang) {
+    const code = normalizeLanguageCode(targetLang);
     const section = document.createElement("section");
     section.className = "landing-desc-section";
-    if (heading) {
-      const h = document.createElement("h3");
-      h.textContent = heading;
-      section.appendChild(h);
-    }
-    chunks.forEach(chunk => {
-      const block = document.createElement("div");
-      block.className = "landing-desc-chunk";
-      if (chunk.title) {
-        const sub = document.createElement("strong");
-        sub.textContent = `${chunk.title}. `;
-        block.appendChild(sub);
+    const h3 = document.createElement("h3");
+    h3.textContent = OUV_HEADING[code] || OUV_HEADING.en;
+    section.appendChild(h3);
+
+    sections.forEach(item => {
+      const article = document.createElement("article");
+      article.className = "landing-desc-chunk";
+      if (item.heading) {
+        const h4 = document.createElement("h4");
+        h4.textContent = item.heading;
+        article.appendChild(h4);
       }
-      const span = document.createElement("span");
-      span.textContent = chunk.body || chunk;
-      block.appendChild(span);
-      section.appendChild(block);
+      appendParagraphs(article, "landing-desc-para", item.body);
+      section.appendChild(article);
     });
+
     container.appendChild(section);
   }
 
@@ -182,7 +247,6 @@
     const container = document.getElementById("landingDescription");
     if (!container) return;
 
-    const labels = sectionLabels(targetLang);
     const descEn = englishDescriptionForSite(site);
     const justEn = (site?.justification_en || "").trim();
     const target = normalizeLanguageCode(targetLang);
@@ -190,26 +254,31 @@
     clearDescriptionContainer(container);
 
     if (!descEn && !justEn) {
-      const fallback = getUnescoDescription(site, target) || "Ingen beskrivning tillganglig.";
-      appendParagraph(container, "landing-desc-intro", fallback);
+      const fallback = getUnescoDescription(site, target) || "Ingen beskrivning tillgänglig.";
+      appendParagraphs(container, "landing-desc-intro", fallback);
       return;
     }
 
-    const introText = descEn ? await translateChunk(descEn, target) : "";
-    appendParagraph(container, "landing-desc-intro", introText);
+    if (descEn) {
+      const introText = await translateBody(descEn, target);
+      appendParagraphs(container, "landing-desc-intro", introText);
+    }
 
     if (!justEn) return;
 
-    const sections = splitJustificationSections(justEn);
-    const translatedSections = [];
-    for (const section of sections) {
-      translatedSections.push({
-        title: section.title ? await translateChunk(section.title, target) : "",
-        body: await translateChunk(section.body, target),
+    const parsed = splitJustificationSections(justEn);
+    const rendered = [];
+    for (const part of parsed) {
+      const body = await translateBody(part.body, target);
+      rendered.push({
+        heading: part.titleRaw
+          ? localizeSectionHeading(part.titleRaw, target)
+          : "",
+        body,
       });
     }
 
-    appendSection(container, labels.outstanding, translatedSections);
+    appendJustificationSections(container, rendered, target);
   }
 
   async function renderSite(site) {
@@ -220,7 +289,7 @@
     const profileLink = document.getElementById("landingProfileLink");
     const uid = String(site.unesco_id || site.id || siteRef);
 
-    if (title) title.textContent = site.name || "Varldsarv";
+    if (title) title.textContent = site.name || "Världsarv";
     if (meta) {
       const parts = [site.country, site.category, site.year_inscribed].filter(Boolean);
       meta.textContent = parts.join(" · ");
@@ -232,16 +301,16 @@
       const container = document.getElementById("landingDescription");
       clearDescriptionContainer(container);
       const localized = getUnescoDescription(site, lang) || site.description || "";
-      appendParagraph(
+      appendParagraphs(
         container,
         "landing-desc-intro",
-        localized || "Ingen beskrivning tillganglig."
+        localized || "Ingen beskrivning tillgänglig."
       );
     }
 
     if (img) {
       img.src = site.image_url || unescoImageUrl(uid);
-      img.alt = site.name || "Varldsarv";
+      img.alt = site.name || "Världsarv";
       img.onerror = () => {
         img.style.display = "none";
       };
@@ -317,7 +386,7 @@
         return;
       }
     } catch (_) {
-      /* fall back to local JSON */
+      /* fall back */
     }
 
     try {
@@ -335,12 +404,12 @@
     const question = input ? input.value.trim() : "";
 
     if (!question) {
-      toast("Skriv en fraga forst.");
+      toast("Skriv en fråga först.");
       return;
     }
     if (!site) return;
 
-    if (answerBox) answerBox.textContent = "AI soker svar...";
+    if (answerBox) answerBox.textContent = "AI söker svar...";
 
     try {
       const response = await fetch(`${API_BASE}/api/ai/ask`, {
@@ -357,14 +426,14 @@
         throw new Error(data.detail || "AI request failed");
       }
       if (answerBox) {
-        answerBox.textContent = data.answer || "Inget svar tillgangligt.";
+        answerBox.textContent = data.answer || "Inget svar tillgängligt.";
       }
     } catch (error) {
       if (answerBox) {
         answerBox.textContent =
           error?.message && error.message !== "AI request failed"
-            ? `Kunde inte na AI-tjansten: ${error.message}`
-            : "Kunde inte na AI-tjansten.";
+            ? `Kunde inte nå AI-tjänsten: ${error.message}`
+            : "Kunde inte nå AI-tjänsten.";
       }
     }
   }

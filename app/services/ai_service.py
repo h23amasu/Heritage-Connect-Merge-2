@@ -52,7 +52,7 @@ _MIN_WORD_MATCHES_SINGLE = 1
 _MIN_WORD_MATCHES_MULTI = 2
 _OPENAI_CONTEXT_MAX = 20000
 _UNESCO_SECTION_SPLIT = re.compile(
-    r"(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management))",
+    r"(?=(?:Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements))",
     re.IGNORECASE,
 )
 
@@ -346,9 +346,22 @@ def _split_semantic_chunks(context: str) -> list[str]:
     if not text:
         return []
 
+    header = re.compile(
+        r"^(Brief synthesis|Criterion\s*\([ivx]+\)|Integrity|Authenticity|Protection and management requirements)\s*:?\s*",
+        re.IGNORECASE,
+    )
     if _UNESCO_SECTION_SPLIT.search(text):
         parts = _UNESCO_SECTION_SPLIT.split(text)
-        chunks = [p.strip() for p in parts if p.strip() and len(p.strip()) > 50]
+        chunks = []
+        for part in parts:
+            piece = part.strip()
+            if len(piece) < 50:
+                continue
+            match = header.match(piece)
+            if match:
+                piece = piece[match.end() :].strip() or piece
+            if piece:
+                chunks.append(piece)
         if chunks:
             return chunks
 
