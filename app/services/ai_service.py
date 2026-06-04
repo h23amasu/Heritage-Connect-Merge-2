@@ -610,6 +610,15 @@ _YES_PREFIX_BY_LANG: dict[str, str] = {
     "zh": "是的，",
 }
 
+_YES_EVIDENCE_BY_LANG: dict[str, str] = {
+    "sv": "Ja, det finns bevis för det.",
+    "en": "Yes, there is evidence of that.",
+    "it": "Sì, ci sono prove di questo.",
+    "fr": "Oui, il existe des preuves de cela.",
+    "es": "Sí, hay pruebas de ello.",
+    "de": "Ja, dafür gibt es Belege.",
+}
+
 def _infer_question_language(question: str, fallback: str = "sv") -> str:
     raw = (question or "").strip()
     if not raw:
@@ -1072,12 +1081,23 @@ def _localize_yes_prefix(language: str) -> str:
     return _YES_PREFIX_BY_LANG.get(lang, _YES_PREFIX_BY_LANG["en"])
 
 
+def _localize_yes_evidence(language: str) -> str:
+    lang = _normalize_language(language)
+    return _YES_EVIDENCE_BY_LANG.get(lang, _YES_EVIDENCE_BY_LANG["en"])
+
+
 def _format_yes_no_answer(question: str, answer: str, language: str) -> str:
     text = (answer or "").strip()
     if not text or not _asks_yes_no(question):
         return text
     if re.match(r"^(ja|yes|oui|sí|si|sì|kyllä|да|نعم|是的)\b", text, re.IGNORECASE):
         return text
+    if re.search(r"\b(spår|bevis|evidence|proof|signs?)\b", (question or "").lower()):
+        return f"{_localize_yes_evidence(language)} {text}".strip()
+    if re.match(r"^samtidigt\s+har\b", text, re.IGNORECASE):
+        text = re.sub(r"^samtidigt\s+har\b", "Det har", text, flags=re.IGNORECASE)
+    if re.match(r"^at the same time,\s*", text, re.IGNORECASE):
+        text = re.sub(r"^at the same time,\s*", "", text, flags=re.IGNORECASE)
     return f"{_localize_yes_prefix(language)} {text}".strip()
 
 
@@ -1306,6 +1326,11 @@ def _question_answer_bonus(sentence: str, question: str) -> float:
             lower,
         ):
             bonus += 2.5
+        if re.search(r"\bscientists?|researchers?\b", lower) and re.search(
+            r"\bdiscover(?:ed|ies)?\b",
+            lower,
+        ):
+            bonus += 1.5
 
     if _asks_time_period(question):
         if re.search(
@@ -1314,10 +1339,17 @@ def _question_answer_bonus(sentence: str, question: str) -> float:
             lower,
         ):
             bonus += 2.0
+        if re.search(
+            r"\b\d[\d,.\s]*\s*(?:million|thousand|years?)\s+ago\b.*\b\d[\d,.\s]*\s*(?:million|thousand|years?)\s+ago\b",
+            lower,
+        ):
+            bonus += 4.0
 
     if _asks_quantity(question):
         if re.search(r"\b\d[\d,.\s]*\b", lower):
             bonus += 1.5
+        if re.search(r"\b\d[\d,.\s]*\s+(?:sites?|places?)\b", lower):
+            bonus += 3.0
 
     return bonus
 
