@@ -14,7 +14,7 @@
       LOADING_SITE: "Laddar plats…",
       AI_TITLE: "Fråga AI om detta världsarv",
       AI_HELP:
-        "AI:n läser hela din fråga och svarar från UNESCO:s långa källtexter ovan – inga gissningar. Fråga t.ex. om Parthenon, demokrati, eller när platsen blev världsarv.",
+        "Vad vill du veta om det här världsarvet? AI:n söker svaret i UNESCO:s källtexter.",
       AI_PLACEHOLDER: "Vad är unikt med detta världsarv?",
       AI_ASK_BTN: "Fråga",
       MANAGE_PROFILE: "Hantera prenumeration och profil",
