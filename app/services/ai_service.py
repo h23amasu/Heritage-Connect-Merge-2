@@ -325,7 +325,7 @@ _SIGNIFICANCE_HINTS = (
 )
 _AREA_QUESTION_RE = re.compile(
     r"\b(?:"
-    r"yta|ytan|area|storlek|size|hectare|hektar|hectares|"
+    r"yta|ytan|area|storlek|size|hectare|hektar|hectares|km2|km²|square kilometers?|"
     r"hur stor|hur stort|how (?:big|large)|fläche|superficie|"
     r"quanto è grande|surface|acreage"
     r")\b",
@@ -338,7 +338,7 @@ _AREA_FACT_RE = re.compile(
     r"the inscribed property is|"
     r"nuvarande yta|inskrivna fastighetens nuvarande yta|"
     r"current area of the property is"
-    r")[^.]{0,120}?(\d[\d\s.,]*\s*ha)",
+    r")[^.]{0,120}?(\d[\d\s.,]*\s*(?:ha|km2|km²))",
     re.IGNORECASE,
 )
 _SIGNIFICANCE_CONTEXT_TERMS = (
@@ -908,7 +908,7 @@ def _asks_yes_no(question: str) -> bool:
 
 
 def _extract_area_fact_sentence(context: str) -> str:
-    """Hitta mening om inskriven yta (t.ex. 162.429 ha) i UNESCO-texten."""
+    """Hitta mening om inskriven yta (t.ex. 162.429 ha eller 4,8 km2) i UNESCO-texten."""
     text = (context or "").replace("\n", " ")
     match = _AREA_FACT_RE.search(text)
     if match:
@@ -920,11 +920,11 @@ def _extract_area_fact_sentence(context: str) -> str:
 
     for unit in _split_sentences(text):
         lower = unit.lower()
-        if "ha" in lower and any(
+        if ("ha" in lower or "km2" in lower or "km²" in lower) and any(
             token in lower
             for token in ("area", "property", "inscribed", "yta", "fastighet", "nuvarande")
         ):
-            if re.search(r"\d[\d\s.,]*\s*ha", unit, re.IGNORECASE):
+            if re.search(r"\d[\d\s.,]*\s*(?:ha|km2|km²)", unit, re.IGNORECASE):
                 return _clean_citation_unit(unit)
     return ""
 
@@ -937,10 +937,20 @@ def _answer_property_area_from_context(context: str, language: str) -> str:
     sentence = _extract_area_fact_sentence(context)
     if not sentence:
         return ""
+    lang = _normalize_language(language)
+    km_match = re.search(r"(\d[\d\s.,]+)\s*(km2|km²)", sentence, re.IGNORECASE)
+    if km_match:
+        amount = _format_area_amount(km_match.group(1))
+        unit = km_match.group(2)
+        if lang == "sv":
+            return f"Fastighetsområdet har definierats till {amount} {unit}."
+        if lang == "it":
+            return f"L'area della proprietà è stata definita come {amount} {unit}."
+        if lang == "en":
+            return f"The property area has been defined as {amount} {unit}."
     match = re.search(r"(\d[\d\s.,]+)\s*ha", sentence, re.IGNORECASE)
     if match:
         amount = _format_area_amount(match.group(1))
-        lang = _normalize_language(language)
         if lang == "sv":
             return f"Den inskrivna fastighetens nuvarande yta är {amount} ha."
         if lang == "it":
@@ -1362,6 +1372,19 @@ def _sentence_relevance(sentence: str, question: str, words: list[str]) -> float
     return word_score * 2.0 + similarity + _question_answer_bonus(sentence, question)
 
 
+def _prefer_single_fact_sentence(question: str) -> bool:
+    q = (question or "").lower()
+    if _asks_property_area_or_size(q):
+        return True
+    if _asks_time_period(q) and not _asks_discoveries_or_finds(q):
+        return True
+    if _asks_quantity(q) and not _asks_discoveries_or_finds(q):
+        return True
+    if re.search(r"\b(from what period|från vilken tidsperiod|hur många|how many)\b", q):
+        return True
+    return False
+
+
 def _direct_fact_answer(
     question: str, context: str, language: str, site: Optional[dict] = None
 ) -> str:
@@ -1391,10 +1414,11 @@ def _direct_fact_answer(
         ),
         reverse=True,
     )
-    top = [s for s in ranked if _question_answer_bonus(s, probe_question) > 0][:2]
+    max_hits = 1 if _prefer_single_fact_sentence(probe_question) else 2
+    top = [s for s in ranked if _question_answer_bonus(s, probe_question) > 0][:max_hits]
     if not top:
         return ""
-    return _join_sentences(top, max_sentences=2, language=language)
+    return _join_sentences(top, max_sentences=max_hits, language=language)
 
 
 _INTRO_VAGUE_SUBJECTS = frozenset(
