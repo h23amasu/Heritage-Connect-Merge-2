@@ -127,6 +127,7 @@ _QUESTION_STOP_WORDS = frozenset(
         "about",
         "from",
         "have",
+        "har",
         "does",
         "detta",
         "denna",
@@ -138,10 +139,22 @@ _QUESTION_STOP_WORDS = frozenset(
         "finns",
         "gör",
         "which",
+        "unesco",
+        "vÃ¤rldsarv",
+        "varldsarv",
+        "heritage",
+        "world",
+        "property",
+        "place",
+        "plats",
+        "platsen",
+        "stÃ¤llet",
+        "objektet",
         "vilken",
         "vilket",
         "vilka",
         "hur",
+        "inom",
         "how",
         "why",
         "varför",
@@ -172,8 +185,10 @@ _QUESTION_STOP_WORDS = frozenset(
         "källor",
         "kan",
         "inte",
+        "kommer",
         "the",
         "and",
+        "och",
         "site",
         "say",
         "säger",
@@ -565,11 +580,7 @@ def _filter_sentences_for_language(sentences: list[str], language: str) -> list[
         for sentence in sentences
         if _language_score(sentence, match_lang) >= 0
     ]
-    ranked = preferred or sentences
-    ranked = sorted(
-        ranked, key=lambda sentence: _language_score(sentence, match_lang), reverse=True
-    )
-    return ranked
+    return preferred or sentences
 
 
 def _looks_english(text: str) -> bool:
@@ -710,6 +721,40 @@ def _asks_property_area_or_size(question: str) -> bool:
     return bool(_AREA_QUESTION_RE.search(question or ""))
 
 
+def _asks_discoveries_or_finds(question: str) -> bool:
+    q = (question or "").lower()
+    return bool(
+        re.search(
+            r"\b(uppt[aä]ckt|uppt[aä]ckts|fynd|fynden|hittat|hittats|"
+            r"discover(?:ed|ies)?|found|findings|fossils?|remains?|artifacts?|"
+            r"excavations?|utgr[aä]vningar?)\b",
+            q,
+        )
+    )
+
+
+def _asks_time_period(question: str) -> bool:
+    q = (question or "").lower()
+    return bool(
+        re.search(
+            r"\b(tidsperiod|period|fr[aå]n vilken tid|vilken tid|n[aä]r|"
+            r"when|time period|from what time|how old|dated?|date from|"
+            r"bce|ce|century|million|years? ago|paleolithic|pleistocene)\b",
+            q,
+        )
+    )
+
+
+def _asks_quantity(question: str) -> bool:
+    q = (question or "").lower()
+    return bool(
+        re.search(
+            r"\b(hur m[aå]nga|antal|how many|number of|several|many|count)\b",
+            q,
+        )
+    )
+
+
 def _extract_area_fact_sentence(context: str) -> str:
     """Hitta mening om inskriven yta (t.ex. 162.429 ha) i UNESCO-texten."""
     text = (context or "").replace("\n", " ")
@@ -812,13 +857,6 @@ def _retrieval_terms(
         if word not in seen:
             terms.append(word)
             seen.add(word)
-    if site:
-        for key in ("name", "name_en", "name_sv", "name_it"):
-            name = (site.get(key) or "").strip().lower()
-            for token in _question_tokens(name):
-                if len(token) >= 3 and token not in seen:
-                    terms.append(token)
-                    seen.add(token)
     lang = _normalize_language(language)
     if lang != "en":
         for word in _question_words(_translate_question_for_search(question, lang)):
@@ -1099,16 +1137,91 @@ def _score_sentence(sentence: str, words: list[str]) -> int:
     return sum(1 for w in words if _word_matches_text(w, lower))
 
 
+def _question_answer_bonus(sentence: str, question: str) -> float:
+    lower = sentence.lower()
+    bonus = 0.0
+
+    if _asks_discoveries_or_finds(question):
+        if re.search(
+            r"\b(discover(?:ed|ies)?|found|findings|fossils?|remains?|artifacts?|"
+            r"excavations?|scientists?|researchers?|hominid|animal fossils?|"
+            r"stone tools?|cultural remains?)\b",
+            lower,
+        ):
+            bonus += 2.5
+
+    if _asks_time_period(question):
+        if re.search(
+            r"\b(\d[\d,.\s]*\s*(?:years?|year|million|thousand|centur(?:y|ies)|ha)|"
+            r"bce|ce|paleolithic|pleistocene|dynasty)\b",
+            lower,
+        ):
+            bonus += 2.0
+
+    if _asks_quantity(question):
+        if re.search(r"\b\d[\d,.\s]*\b", lower):
+            bonus += 1.5
+
+    return bonus
+
+
 def _sentence_relevance(sentence: str, question: str, words: list[str]) -> float:
     """Hela frågan vägs in (likhet + nyckelord), inte bara enstaka ord."""
     word_score = float(_score_sentence(sentence, words))
     q_norm = re.sub(r"\s+", " ", (question or "").lower().strip())
     similarity = SequenceMatcher(None, q_norm, sentence.lower()).ratio()
-    return word_score * 2.0 + similarity
+    return word_score * 2.0 + similarity + _question_answer_bonus(sentence, question)
+
+
+def _direct_fact_answer(
+    question: str, context: str, language: str, site: Optional[dict] = None
+) -> str:
+    probe_question = question
+    translated_question = _translate_question_for_search(question, language)
+    if translated_question and translated_question.strip():
+        probe_question = f"{question} {translated_question}".strip()
+
+    if not (
+        _asks_discoveries_or_finds(probe_question)
+        or _asks_time_period(probe_question)
+        or _asks_quantity(probe_question)
+    ):
+        return ""
+
+    terms = _retrieval_terms(question, language, site=site)
+    units = _filter_sentences_for_language(_iter_search_units(context), language)
+    if not units:
+        return ""
+
+    ranked = sorted(
+        units,
+        key=lambda s: (
+            _question_answer_bonus(s, probe_question),
+            _sentence_relevance(s, probe_question, terms),
+            -len(s),
+        ),
+        reverse=True,
+    )
+    top = [s for s in ranked if _question_answer_bonus(s, probe_question) > 0][:2]
+    if not top:
+        return ""
+    return _join_sentences(top, max_sentences=2, language=language)
 
 
 _INTRO_VAGUE_SUBJECTS = frozenset(
     {
+        "i",
+        "in",
+        "om",
+        "about",
+        "de",
+        "des",
+        "du",
+        "di",
+        "del",
+        "sobre",
+        "su",
+        "uber",
         "unikt",
         "unique",
         "detta",
@@ -1256,6 +1369,10 @@ def _cite_from_context(
         if area_answer:
             return area_answer
 
+    direct_fact = _direct_fact_answer(question, context, language, site=site)
+    if direct_fact:
+        return direct_fact
+
     if _asks_uniqueness_or_significance(question):
         significance = _significance_from_context(context, language, site=site)
         if significance:
@@ -1277,9 +1394,12 @@ def _cite_from_context(
         key=lambda s: _sentence_relevance(s, question, terms),
         reverse=True,
     )
-    hits = [s for s in ranked if _score_sentence(s, terms) >= min_score]
-    if not hits and ranked and _sentence_relevance(ranked[0], question, terms) >= 1.2:
-        hits = [ranked[0]]
+    hits = [
+        s
+        for s in ranked
+        if _score_sentence(s, terms) >= min_score
+        or _question_answer_bonus(s, question) >= 3.0
+    ]
     if not hits and _asks_site_intro(question):
         return _intro_from_context(context, language, site=site)
     if not hits:
@@ -1488,11 +1608,6 @@ def ask_ai(
         if area_answer:
             return area_answer, sources, False
 
-    if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
-        openai_result = _try_openai_answer(question, context, site, language)
-        if openai_result:
-            return openai_result[0], sources, openai_result[1]
-
     cited = _cite_from_context(question, context, language, site=site)
     if cited:
         return cited, sources, False
@@ -1508,5 +1623,10 @@ def ask_ai(
         significance = _significance_from_context(context, language, site=site)
         if significance:
             return significance, sources, False
+
+    if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
+        openai_result = _try_openai_answer(question, context, site, language)
+        if openai_result:
+            return openai_result[0], sources, openai_result[1]
 
     return _pick_language_fallback(language, "no_info"), sources, False
