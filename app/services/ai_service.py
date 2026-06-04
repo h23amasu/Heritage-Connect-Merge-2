@@ -513,6 +513,135 @@ def _normalize_language(language: str) -> str:
     return (language or "sv").lower()[:2]
 
 
+_QUESTION_LANGUAGE_MARKERS: dict[str, tuple[str, ...]] = {
+    "sv": (
+        "vad",
+        "när",
+        "var",
+        "vilken",
+        "vilka",
+        "hur",
+        "finns",
+        "världsarv",
+        "platsen",
+        "från",
+        "inom",
+    ),
+    "en": (
+        "what",
+        "when",
+        "where",
+        "which",
+        "how",
+        "does",
+        "there",
+        "site",
+        "within",
+        "finds",
+        "date",
+        "from",
+    ),
+    "it": (
+        "che",
+        "cosa",
+        "quale",
+        "quali",
+        "quando",
+        "dove",
+        "sono",
+        "sito",
+        "reperti",
+        "periodo",
+        "scoperto",
+        "ricercatori",
+    ),
+    "fr": (
+        "quel",
+        "quelle",
+        "quelles",
+        "quand",
+        "où",
+        "site",
+        "découvert",
+        "trouvailles",
+    ),
+    "es": (
+        "qué",
+        "que",
+        "cuándo",
+        "dónde",
+        "sitio",
+        "hallazgos",
+        "descubierto",
+    ),
+    "de": (
+        "was",
+        "wann",
+        "wo",
+        "welche",
+        "welcher",
+        "funde",
+        "stätte",
+        "entdeckt",
+    ),
+    "fi": (
+        "mitä",
+        "milloin",
+        "missä",
+        "mikä",
+        "kuinka",
+        "löydöt",
+        "alueella",
+    ),
+}
+
+_YES_PREFIX_BY_LANG: dict[str, str] = {
+    "sv": "Ja,",
+    "en": "Yes,",
+    "it": "Sì,",
+    "fr": "Oui,",
+    "es": "Sí,",
+    "de": "Ja,",
+    "fi": "Kyllä,",
+    "no": "Ja,",
+    "da": "Ja,",
+    "ru": "Да,",
+    "ar": "نعم،",
+    "zh": "是的，",
+}
+
+def _infer_question_language(question: str, fallback: str = "sv") -> str:
+    raw = (question or "").strip()
+    if not raw:
+        return _normalize_language(fallback)
+
+    if re.search(r"[\u4e00-\u9fff]", raw):
+        return "zh"
+    if re.search(r"[\u0600-\u06ff]", raw):
+        return "ar"
+    if re.search(r"[\u0400-\u04ff]", raw):
+        return "ru"
+    if re.search(r"^(?:what|when|where|which|how|why|is|are|was|were|do|does|did|has|have|had|can|could|from)\b", raw.lower()):
+        return "en"
+    if re.search(r"^(?:che|cosa|quale|quali|quando|dove|è|ha|ci\s+sono)\b", raw.lower()):
+        return "it"
+
+    lower = raw.lower()
+    scores: dict[str, int] = {}
+    for lang, markers in _QUESTION_LANGUAGE_MARKERS.items():
+        score = sum(1 for marker in markers if marker in lower)
+        if score:
+            scores[lang] = score
+
+    if not scores:
+        return _normalize_language(fallback)
+
+    best_lang, best_score = max(scores.items(), key=lambda item: item[1])
+    if best_score < 2:
+        return _normalize_language(fallback)
+    return best_lang
+
+
 def _site_display_name(site: dict, language: str) -> str:
     lang = _normalize_language(language)
     for key in (f"name_{lang}", "name", "name_sv", "name_en"):
@@ -755,6 +884,20 @@ def _asks_quantity(question: str) -> bool:
     )
 
 
+def _asks_yes_no(question: str) -> bool:
+    q = (question or "").strip().lower()
+    if not q:
+        return False
+    return bool(
+        re.search(
+            r"^(?:finns|är|har|kan|var|visar|does|do|did|is|are|was|were|"
+            r"has|have|had|can|could|ci\s+sono|c['’]è|è|ha|sono|est-ce|"
+            r"y a-t-il|hay|es|gibt|ist|sind|onko|voiko)\b",
+            q,
+        )
+    )
+
+
 def _extract_area_fact_sentence(context: str) -> str:
     """Hitta mening om inskriven yta (t.ex. 162.429 ha) i UNESCO-texten."""
     text = (context or "").replace("\n", " ")
@@ -922,6 +1065,20 @@ def _join_sentences(sentences: list[str], max_sentences: int = 3, language: str 
             raw += "."
     source_lang = _answer_source_language(raw, language)
     return _localize_answer(raw, source_lang, language)
+
+
+def _localize_yes_prefix(language: str) -> str:
+    lang = _normalize_language(language)
+    return _YES_PREFIX_BY_LANG.get(lang, _YES_PREFIX_BY_LANG["en"])
+
+
+def _format_yes_no_answer(question: str, answer: str, language: str) -> str:
+    text = (answer or "").strip()
+    if not text or not _asks_yes_no(question):
+        return text
+    if re.match(r"^(ja|yes|oui|sí|si|sì|kyllä|да|نعم|是的)\b", text, re.IGNORECASE):
+        return text
+    return f"{_localize_yes_prefix(language)} {text}".strip()
 
 
 def _heritage_listing_answer(site: dict, language: str) -> str:
@@ -1565,6 +1722,7 @@ def ask_ai(
     Tolkar hela frågan först, svarar sedan strikt från källor.
     """
     question = (question or "").strip()
+    language = _infer_question_language(question, fallback=language)
     intent = classify_question_intent(question)
 
     local_files = load_local_documents(site_id)
@@ -1610,23 +1768,27 @@ def ask_ai(
 
     cited = _cite_from_context(question, context, language, site=site)
     if cited:
-        return cited, sources, False
+        return _format_yes_no_answer(question, cited, language), sources, False
 
     if intent == QuestionIntent.HERITAGE_CONTENT and _asks_site_intro(question):
         intro = _intro_from_context(context, language, site=site)
         if intro:
-            return intro, sources, False
+            return _format_yes_no_answer(question, intro, language), sources, False
 
     if intent == QuestionIntent.HERITAGE_CONTENT and _asks_uniqueness_or_significance(
         question
     ):
         significance = _significance_from_context(context, language, site=site)
         if significance:
-            return significance, sources, False
+            return _format_yes_no_answer(question, significance, language), sources, False
 
     if _openai_enabled() and intent == QuestionIntent.HERITAGE_CONTENT:
         openai_result = _try_openai_answer(question, context, site, language)
         if openai_result:
-            return openai_result[0], sources, openai_result[1]
+            return (
+                _format_yes_no_answer(question, openai_result[0], language),
+                sources,
+                openai_result[1],
+            )
 
     return _pick_language_fallback(language, "no_info"), sources, False

@@ -1129,6 +1129,9 @@
     const askBtn = document.getElementById("landingAiBtn");
     const site = window.__landingSite;
     const question = input ? input.value.trim() : "";
+    const requestLang = normalizeLanguageCode(
+      window.__LANDING_LANG__ || document.documentElement.lang || lang || "sv"
+    );
 
     if (!question) {
       toast(landingT("ASK_FIRST"));
@@ -1154,7 +1157,7 @@
         body: JSON.stringify({
           site_id: siteId,
           question,
-          language: lang,
+          language: requestLang,
         }),
         signal: controller.signal,
       });
